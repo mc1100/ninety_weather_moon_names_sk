@@ -12,34 +12,38 @@
 
 // This is the Default APP_ID to work with old versions of httpebble
 //#define MY_UUID { 0x91, 0x41, 0xB6, 0x28, 0xBC, 0x89, 0x49, 0x8E, 0xB1, 0x47, 0x04, 0x9F, 0x49, 0xC0, 0x99, 0xAD } //httpebble (iOS)
-#define MY_UUID { 0x91, 0x41, 0xB6, 0x28, 0xBC, 0x89, 0x49, 0x8E, 0xB1, 0x47, 0x29, 0x08, 0xF1, 0x7C, 0x3F, 0xAC } //Pebble Connect with httpebble (Android)
+#define MY_UUID { 0x91, 0x41, 0xB6, 0x28, 0xBC, 0x89, 0x49, 0x8E, 0xB1, 0x47, 0x29, 0x08, 0xF1, 0x7C, 0x3F, 0xAD } //Pebble Connect with httpebble (Android)
+// MY_UUID changed because of problems when downloading from cloudpebble.net after successful build
 
-PBL_APP_INFO(MY_UUID,
-	     "91 Weather ger", "noVo",
-	     1, 5, /* App major/minor version */
-	     RESOURCE_ID_IMAGE_MENU_ICON,
-	     APP_INFO_WATCH_FACE);
+#define MY_APP "91 Weather Moon Names SK"
+
+PBL_APP_INFO(
+		MY_UUID,
+		MY_APP, "mc1100",
+		0, 2, /* App major/minor version */
+		RESOURCE_ID_IMAGE_MENU_ICON,
+		APP_INFO_WATCH_FACE);
 
 Window window;
 BmpContainer background_image;
 BmpContainer time_format_image;
-TextLayer cwLayer; 				 // The calendar week
-TextLayer text_sunrise_layer; 		//
-TextLayer text_sunset_layer; 		//
-TextLayer text_temperature_layer; 	 //
-TextLayer DayOfWeekLayer; 		   //
-TextLayer MoonLayer; 			 // layer for Moonphase
-TextLayer calls_layer;   		  // layer for Phone Calls info
-TextLayer sms_layer;   			// layer for SMS info
-TextLayer debug_layer;   		 // layer for DEBUG info
+TextLayer ndLayer;					// The nameday
+TextLayer cwLayer;					// The calendar week
+TextLayer text_sunrise_layer;		//
+TextLayer text_sunset_layer;		//
+TextLayer text_temperature_layer;	//
+TextLayer DayOfWeekLayer;			//
+TextLayer MoonLayer;				// layer for Moonphase
+TextLayer calls_layer;				// layer for Phone Calls info
+TextLayer sms_layer;				// layer for SMS info
+//TextLayer debug_layer;			// layer for DEBUG info
 
-char weather_url[] =   "https://ofkorth.net/pebble/weather.php";
-static int our_latitude, our_longitude, our_timezone = 99; //dummy value because null and 0 are valid values
+static int our_latitude, our_longitude, our_timezone = 99;	//dummy value because null and 0 are valid values
 static bool located = false;
 static bool calculated_sunset_sunrise = false;
 static bool temperature_set = false;
 
-GFont font_temperature;        		/* font for Temperature */
+// GFont font_temperature;        		/* font for Temperature */
 
 
 const int DATENUM_IMAGE_RESOURCE_IDS[] = {
@@ -70,7 +74,8 @@ const int WEATHER_IMAGE_RESOURCE_IDS[] = {
 	RESOURCE_ID_IMAGE_CLOUDY,
 	RESOURCE_ID_IMAGE_PARTLY_CLOUDY_DAY,
 	RESOURCE_ID_IMAGE_PARTLY_CLOUDY_NIGHT,
-	RESOURCE_ID_IMAGE_NO_BLUETOOTH // RESOURCE_ID_IMAGE_NO_WEATHER (black, empty picure)
+	RESOURCE_ID_IMAGE_NO_WEATHER, // (black, empty picure)
+	RESOURCE_ID_IMAGE_NO_BLUETOOTH
 };
 
 
@@ -103,6 +108,22 @@ const int MOON_IMAGE_RESOURCE_IDS[] = {
   RESOURCE_ID_IMAGE_MOON_5,
   RESOURCE_ID_IMAGE_MOON_6,
   RESOURCE_ID_IMAGE_MOON_7
+};
+
+
+const int NAMEDAYS_BLOB_RESOURCE_IDS[] = {
+  RESOURCE_ID_NAMEDAYS_JAN_SVK,
+  RESOURCE_ID_NAMEDAYS_FEB_SVK,
+  RESOURCE_ID_NAMEDAYS_MAR_SVK,
+  RESOURCE_ID_NAMEDAYS_APR_SVK,
+  RESOURCE_ID_NAMEDAYS_MAY_SVK,
+  RESOURCE_ID_NAMEDAYS_JUN_SVK,
+  RESOURCE_ID_NAMEDAYS_JUL_SVK,
+  RESOURCE_ID_NAMEDAYS_AUG_SVK,
+  RESOURCE_ID_NAMEDAYS_SEP_SVK,
+  RESOURCE_ID_NAMEDAYS_OCT_SVK,
+  RESOURCE_ID_NAMEDAYS_NOV_SVK,
+  RESOURCE_ID_NAMEDAYS_DEC_SVK
 };
 
 
@@ -172,8 +193,8 @@ void adjustTimezone(float* time) {
 
 
 void updateSunsetSunrise() {
-	static char sunrise_text[] = "00:00";
-	static char sunset_text[]  = "00:00";
+	static char sunrise_text[] = "--:--";
+	static char sunset_text[]  = "--:--";
 	
 	PblTm pblTime;
 	get_time(&pblTime);
@@ -221,7 +242,7 @@ void display_counters(TextLayer *dataLayer, struct Data d, int infoType) {
 	static char temp_text[5];
 	
 	if(d.link_status != LinkStatusOK){
-		memcpy(temp_text, "?", 1);
+		memcpy(temp_text, "-", 1);
 	}
 	else {	
 		if (infoType == 1) {
@@ -249,7 +270,7 @@ void display_counters(TextLayer *dataLayer, struct Data d, int infoType) {
 void failed(int32_t cookie, int http_status, void* context) {
 	
 	if((cookie == 0 || cookie == WEATHER_HTTP_COOKIE) && !temperature_set) {
-		set_container_image(&weather_images[0], WEATHER_IMAGE_RESOURCE_IDS[10], GPoint(12, 5));   // Error Image ToDo: diff between http and BT error
+		set_container_image(&weather_images[0], WEATHER_IMAGE_RESOURCE_IDS[11], GPoint(12, 5));   // Error Image ToDo: diff between http and BT error
 		//text_layer_set_text(&text_temperature_layer, "°"); // for what? do not show ° alone 
 	}
 	
@@ -266,10 +287,8 @@ void success(int32_t cookie, int http_status, DictionaryIterator* received, void
 	if(icon_tuple) {
 		int icon = icon_tuple->value->int8;
 		if(icon >= 0 && icon <= 9) {
-			text_layer_set_text(&text_temperature_layer, "°");
 			set_container_image(&weather_images[0], WEATHER_IMAGE_RESOURCE_IDS[icon], GPoint(12, 5)); // Weather Image
 		} else {
-			text_layer_set_text(&text_temperature_layer, ""); // do not show ° alone 
 			set_container_image(&weather_images[0], WEATHER_IMAGE_RESOURCE_IDS[10], GPoint(12, 5));   // Error Image ToDo: diff between http and BT error
 		}
 	}
@@ -283,6 +302,8 @@ void success(int32_t cookie, int http_status, DictionaryIterator* received, void
 		memcpy(&temp_text[degree_pos], "°", 3);
 		text_layer_set_text(&text_temperature_layer, temp_text);
 		temperature_set = true;
+	} else {
+		text_layer_set_text(&text_temperature_layer, ""); // do not show ° alone 
 	}
 	
 	link_monitor_handle_success(&data); //Notify the user of reconnection (vibrate)
@@ -415,7 +436,7 @@ void update_display(PblTm *current_time) {
 	  // Year
 	  set_container_image(&date_digits_images[4], DATENUM_IMAGE_RESOURCE_IDS[((1900+current_time->tm_year)%1000)/10], GPoint(day_month_x[2], 71));
 	  set_container_image(&date_digits_images[5], DATENUM_IMAGE_RESOURCE_IDS[((1900+current_time->tm_year)%1000)%10], GPoint(day_month_x[2] + 13, 71));
-		
+
 	  if (!clock_is_24h_style()) {
 		if (current_time->tm_hour >= 12) {
 		  set_container_image(&time_format_image, RESOURCE_ID_IMAGE_PM_MODE, GPoint(118, 140));
@@ -430,7 +451,6 @@ void update_display(PblTm *current_time) {
 		}
 	  }
 	  
-	  
 	  // -------------------- Moon_phase
 	  int moonphase_number;
 	  moonphase_number = moon_phase(current_time->tm_year+1900,current_time->tm_mon,current_time->tm_mday);
@@ -440,8 +460,35 @@ void update_display(PblTm *current_time) {
 	  // -------------------- Moon_phase
 	 
 	  
+	  // -------------------- Nameday
+	  static uint8_t buffer[512];
+	  static const char *name;
+	  if (the_last_hour == 25 || !current_time->tm_hour) {
+		  int day_number = current_time->tm_mday - 1;
+		  if (the_last_hour == 25 || !day_number) {
+			  ResHandle rh = resource_get_handle(NAMEDAYS_BLOB_RESOURCE_IDS[current_time->tm_mon]);
+			  /* size_t s = */ resource_load(rh, buffer, sizeof(buffer));
+			  name = (const char *) buffer;
+			  if (the_last_hour == 25) {
+				  for (int i = 0; i < day_number; ++i) {
+					  do {
+						  ++name;
+					  } while (*name);
+					  ++name;
+				  }
+			  }
+		  } else {
+			  do {
+				  ++name;
+			  } while (*name);
+			  ++name;
+		  }
+	  }
+	  text_layer_set_text(&ndLayer, name);
+	  // -------------------- Nameday  
+
 	  // -------------------- Calendar_week  
-	  static char cw_text[] = "XX00";
+	  static char cw_text[] = "888D/88T";
 	  string_format_time(cw_text, sizeof(cw_text), TRANSLATION_CW , current_time);
 	  text_layer_set_text(&cwLayer, cw_text); 
 	  // ------------------- Calendar week
@@ -470,8 +517,8 @@ void handle_minute_tick(AppContextRef ctx, PebbleTickEvent *t) {
 	if(!calculated_sunset_sunrise)
     {
 	    // Start with some default values
-	    text_layer_set_text(&text_sunrise_layer, "00:00");
-	    text_layer_set_text(&text_sunset_layer, "00:00");
+	    text_layer_set_text(&text_sunrise_layer, "--:--");
+	    text_layer_set_text(&text_sunset_layer, "--:--");
     }
 	
 	if(!(t->tick_time->tm_min % 2) || data.link_status == LinkStatusUnknown) link_monitor_ping();
@@ -481,7 +528,7 @@ void handle_minute_tick(AppContextRef ctx, PebbleTickEvent *t) {
 void handle_init(AppContextRef ctx) {
   (void)ctx;
 
-	window_init(&window, "91 Weather ger");
+	window_init(&window, MY_APP);
 	window_stack_push(&window, true /* Animated */);
   
 	window_set_background_color(&window, GColorBlack);
@@ -493,7 +540,7 @@ void handle_init(AppContextRef ctx) {
 
 	bmp_init_container(RESOURCE_ID_IMAGE_BACKGROUND, &background_image); //IMAGE_BACKGROUND_OLD without missing call/sms notification
 	layer_add_child(&window.layer, &background_image.layer.layer);
-	
+
 	if (clock_is_24h_style()) {
 		bmp_init_container(RESOURCE_ID_IMAGE_24_HOUR_MODE, &time_format_image);
 
@@ -502,26 +549,34 @@ void handle_init(AppContextRef ctx) {
 
 		layer_add_child(&window.layer, &time_format_image.layer.layer);
 	}
-	
+
 	// Moon Text
-	text_layer_init(&MoonLayer, GRect(88, 136, 50 /* width */, 30 /* height */));
+	text_layer_init(&MoonLayer, GRect(88, 136, 50 /* width */, 14 /* height */));
 	layer_add_child(&background_image.layer.layer, &MoonLayer.layer);
 	text_layer_set_text_color(&MoonLayer, GColorWhite);
 	text_layer_set_background_color(&MoonLayer, GColorClear);
 	text_layer_set_font(&MoonLayer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
 
+	// Nameday Text
+	text_layer_init(&ndLayer, GRect(5, 50, 85 /* width */, 14 /* height */));
+	layer_add_child(&background_image.layer.layer, &ndLayer.layer);
+	text_layer_set_text_color(&ndLayer, GColorWhite);
+	text_layer_set_background_color(&ndLayer, GColorClear);
+	text_layer_set_font(&ndLayer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
+
 	// Calendar Week Text
-	text_layer_init(&cwLayer, GRect(108, 50, 80 /* width */, 30 /* height */));
+	text_layer_init(&cwLayer, GRect(90, 50, 49 /* width */, 14 /* height */));
 	layer_add_child(&background_image.layer.layer, &cwLayer.layer);
 	text_layer_set_text_color(&cwLayer, GColorWhite);
 	text_layer_set_background_color(&cwLayer, GColorClear);
 	text_layer_set_font(&cwLayer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
+	text_layer_set_text_alignment(&cwLayer, GTextAlignmentRight);
 
 	// Sunrise Text
 	text_layer_init(&text_sunrise_layer, window.layer.frame);
 	text_layer_set_text_color(&text_sunrise_layer, GColorWhite);
 	text_layer_set_background_color(&text_sunrise_layer, GColorClear);
-	layer_set_frame(&text_sunrise_layer.layer, GRect(7, 152, 100, 30));
+	layer_set_frame(&text_sunrise_layer.layer, GRect(7, 152, 100, 14));
 	text_layer_set_font(&text_sunrise_layer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
 	layer_add_child(&window.layer, &text_sunrise_layer.layer);
 
@@ -529,7 +584,7 @@ void handle_init(AppContextRef ctx) {
 	text_layer_init(&text_sunset_layer, window.layer.frame);
 	text_layer_set_text_color(&text_sunset_layer, GColorWhite);
 	text_layer_set_background_color(&text_sunset_layer, GColorClear);
-	layer_set_frame(&text_sunset_layer.layer, GRect(110, 152, 100, 30));
+	layer_set_frame(&text_sunset_layer.layer, GRect(110, 152, 100, 14));
 	text_layer_set_font(&text_sunset_layer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
 	layer_add_child(&window.layer, &text_sunset_layer.layer); 
   
@@ -540,9 +595,9 @@ void handle_init(AppContextRef ctx) {
 	layer_set_frame(&text_temperature_layer.layer, GRect(68, 3, 64, 68));
 	text_layer_set_font(&text_temperature_layer, fonts_get_system_font(FONT_KEY_GOTHAM_42_LIGHT)); //font_temperature
 	layer_add_child(&window.layer, &text_temperature_layer.layer);  
-  
+
 	// Day of week text
-	text_layer_init(&DayOfWeekLayer, GRect(5, 62, 130 /* width */, 30 /* height */));
+	text_layer_init(&DayOfWeekLayer, GRect(5, 62, 130 /* width */, 24 /* height */));
 	layer_add_child(&background_image.layer.layer, &DayOfWeekLayer.layer);
 	text_layer_set_text_color(&DayOfWeekLayer, GColorWhite);
 	text_layer_set_background_color(&DayOfWeekLayer, GColorClear);
@@ -552,7 +607,7 @@ void handle_init(AppContextRef ctx) {
 	text_layer_init(&calls_layer, window.layer.frame);
 	text_layer_set_text_color(&calls_layer, GColorWhite);
 	text_layer_set_background_color(&calls_layer, GColorClear);
-	layer_set_frame(&calls_layer.layer, GRect(12, 135, 100, 30));
+	layer_set_frame(&calls_layer.layer, GRect(12, 135, 100, 14));
 	text_layer_set_font(&calls_layer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
 	layer_add_child(&window.layer, &calls_layer.layer);
 	text_layer_set_text(&calls_layer, "-");
@@ -561,18 +616,18 @@ void handle_init(AppContextRef ctx) {
 	text_layer_init(&sms_layer, window.layer.frame);
 	text_layer_set_text_color(&sms_layer, GColorWhite);
 	text_layer_set_background_color(&sms_layer, GColorClear);
-	layer_set_frame(&sms_layer.layer, GRect(41, 135, 100, 30));
+	layer_set_frame(&sms_layer.layer, GRect(41, 135, 100, 14));
 	text_layer_set_font(&sms_layer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
 	layer_add_child(&window.layer, &sms_layer.layer);
 	text_layer_set_text(&sms_layer, "-");
 
 	// DEBUG Info layer 
-	text_layer_init(&debug_layer, window.layer.frame);
-	text_layer_set_text_color(&debug_layer, GColorWhite);
-	text_layer_set_background_color(&debug_layer, GColorClear);
-	layer_set_frame(&debug_layer.layer, GRect(50, 152, 100, 30));
-	text_layer_set_font(&debug_layer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
-	layer_add_child(&window.layer, &debug_layer.layer);
+	//text_layer_init(&debug_layer, window.layer.frame);
+	//text_layer_set_text_color(&debug_layer, GColorWhite);
+	//text_layer_set_background_color(&debug_layer, GColorClear);
+	//layer_set_frame(&debug_layer.layer, GRect(50, 152, 100, 30));
+	//text_layer_set_font(&debug_layer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
+	//layer_add_child(&window.layer, &debug_layer.layer);
 	// text_layer_set_text(&debug_layer, "-");
 	
 	data.link_status = LinkStatusUnknown;
@@ -611,7 +666,7 @@ void handle_deinit(AppContextRef ctx) {
 		bmp_deinit_container(&moon_digits_images[i]);
 	}
 	
-	fonts_unload_custom_font(font_temperature);
+	//fonts_unload_custom_font(font_temperature);
 }
 
 
@@ -643,20 +698,11 @@ void request_weather() {
 	
 	// Build the HTTP request
 	DictionaryIterator *body;
-	HTTPResult result = http_out_get(weather_url, WEATHER_HTTP_COOKIE, &body);
+	HTTPResult result = http_out_get("https://ofkorth.net/pebble/weather.php", WEATHER_HTTP_COOKIE, &body);
 	if(result != HTTP_OK) {
 		return;
 	}
-	else {
-		//when URL down change to other URL
-		if(strcmp(weather_url, "http://www.zone-mr.net/api/weather.php") != 0) {
-			strcpy(weather_url, "http://www.zone-mr.net/api/weather.php");
-		}
-		else {
-				strcpy(weather_url, "https://ofkorth.net/pebble/weather.php");
-			}
-	}
-	
+
 	dict_write_int32(body, WEATHER_KEY_LATITUDE, our_latitude);
 	dict_write_int32(body, WEATHER_KEY_LONGITUDE, our_longitude);
 	dict_write_cstring(body, WEATHER_KEY_UNIT_SYSTEM, UNIT_SYSTEM);
