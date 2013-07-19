@@ -1,4 +1,4 @@
-ninety_weather_moon_ger
-=======================
+ninety_weather_moon_names_sk
+============================
 
-91 Weather Moonphase (Pebble Watchface)
+91 Weather Moonphase Namedays (Pebble Watchface)
