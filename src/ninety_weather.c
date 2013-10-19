@@ -20,7 +20,7 @@
 PBL_APP_INFO(
 		MY_UUID,
 		MY_APP, "mc1100",
-		0, 2, /* App major/minor version */
+		0, 3, /* App major/minor version */
 		RESOURCE_ID_IMAGE_MENU_ICON,
 		APP_INFO_WATCH_FACE);
 
@@ -32,7 +32,6 @@ TextLayer cwLayer;					// The calendar week
 TextLayer text_sunrise_layer;		//
 TextLayer text_sunset_layer;		//
 TextLayer text_temperature_layer;	//
-TextLayer DayOfWeekLayer;			//
 TextLayer MoonLayer;				// layer for Moonphase
 TextLayer calls_layer;				// layer for Phone Calls info
 TextLayer sms_layer;				// layer for SMS info
@@ -43,7 +42,17 @@ static bool located = false;
 static bool calculated_sunset_sunrise = false;
 static bool temperature_set = false;
 
-// GFont font_temperature;        		/* font for Temperature */
+const int DAY_NAME_IMAGE_RESOURCE_IDS[] = {
+  RESOURCE_ID_IMAGE_DAY_NAME_SUN,
+  RESOURCE_ID_IMAGE_DAY_NAME_MON,
+  RESOURCE_ID_IMAGE_DAY_NAME_TUE,
+  RESOURCE_ID_IMAGE_DAY_NAME_WED,
+  RESOURCE_ID_IMAGE_DAY_NAME_THU,
+  RESOURCE_ID_IMAGE_DAY_NAME_FRI,
+  RESOURCE_ID_IMAGE_DAY_NAME_SAT
+};
+
+BmpContainer day_name_image;
 
 
 const int DATENUM_IMAGE_RESOURCE_IDS[] = {
@@ -210,8 +219,8 @@ void updateSunsetSunrise() {
 	  time_format = "%I:%M";
 	}
 
-	float sunriseTime = calcSunRise(pblTime.tm_year, pblTime.tm_mon+1, pblTime.tm_mday, our_latitude / 10000, our_longitude / 10000, 91.0f);
-	float sunsetTime = calcSunSet(pblTime.tm_year, pblTime.tm_mon+1, pblTime.tm_mday, our_latitude / 10000, our_longitude / 10000, 91.0f);
+	float sunriseTime = calcSunRise(pblTime.tm_year, pblTime.tm_mon+1, pblTime.tm_mday, our_latitude / 10000, our_longitude / 10000, ZENITH_OFFICIAL);
+	float sunsetTime = calcSunSet(pblTime.tm_year, pblTime.tm_mon+1, pblTime.tm_mday, our_latitude / 10000, our_longitude / 10000, ZENITH_OFFICIAL);
 	adjustTimezone(&sunriseTime);
 	adjustTimezone(&sunsetTime);
 	
@@ -270,7 +279,7 @@ void display_counters(TextLayer *dataLayer, struct Data d, int infoType) {
 void failed(int32_t cookie, int http_status, void* context) {
 	
 	if((cookie == 0 || cookie == WEATHER_HTTP_COOKIE) && !temperature_set) {
-		set_container_image(&weather_images[0], WEATHER_IMAGE_RESOURCE_IDS[11], GPoint(12, 5));   // Error Image ToDo: diff between http and BT error
+		set_container_image(&weather_images[0], WEATHER_IMAGE_RESOURCE_IDS[11], GPoint(4, 5));   // Error Image ToDo: diff between http and BT error
 		//text_layer_set_text(&text_temperature_layer, "°"); // for what? do not show ° alone 
 	}
 	
@@ -287,19 +296,19 @@ void success(int32_t cookie, int http_status, DictionaryIterator* received, void
 	if(icon_tuple) {
 		int icon = icon_tuple->value->int8;
 		if(icon >= 0 && icon <= 9) {
-			set_container_image(&weather_images[0], WEATHER_IMAGE_RESOURCE_IDS[icon], GPoint(12, 5)); // Weather Image
+			set_container_image(&weather_images[0], WEATHER_IMAGE_RESOURCE_IDS[icon], GPoint(4, 5)); // Weather Image
 		} else {
-			set_container_image(&weather_images[0], WEATHER_IMAGE_RESOURCE_IDS[10], GPoint(12, 5));   // Error Image ToDo: diff between http and BT error
+			set_container_image(&weather_images[0], WEATHER_IMAGE_RESOURCE_IDS[10], GPoint(4, 5));   // Error Image ToDo: diff between http and BT error
 		}
 	}
 	
 	Tuple* temperature_tuple = dict_find(received, WEATHER_KEY_TEMPERATURE);
 	if(temperature_tuple) {
 		
-		static char temp_text[5];
+		static char temp_text[6];
 		memcpy(temp_text, itoa(temperature_tuple->value->int16), 4);
 		int degree_pos = strlen(temp_text);
-		memcpy(&temp_text[degree_pos], "°", 3);
+		memcpy(&temp_text[degree_pos], " °", 4);
 		text_layer_set_text(&text_temperature_layer, temp_text);
 		temperature_set = true;
 	} else {
@@ -408,22 +417,20 @@ void receivedtime(int32_t utc_offset_seconds, bool is_dst, uint32_t unixtime, co
 
 
 void update_display(PblTm *current_time) {
-  
   unsigned short display_hour = get_display_hour(current_time->tm_hour);
-  
-  //Hour
-  set_container_image(&time_digits_images[0], BIG_DIGIT_IMAGE_RESOURCE_IDS[display_hour/10], GPoint(4, 94));
-  set_container_image(&time_digits_images[1], BIG_DIGIT_IMAGE_RESOURCE_IDS[display_hour%10], GPoint(37, 94));
-  
-  //Minute
+
+  // Minute
   set_container_image(&time_digits_images[2], BIG_DIGIT_IMAGE_RESOURCE_IDS[current_time->tm_min/10], GPoint(80, 94));
   set_container_image(&time_digits_images[3], BIG_DIGIT_IMAGE_RESOURCE_IDS[current_time->tm_min%10], GPoint(111, 94));
-   
-	
+
   if (the_last_hour != display_hour) {
 	  
+	  // Hour
+	  set_container_image(&time_digits_images[0], BIG_DIGIT_IMAGE_RESOURCE_IDS[display_hour/10], GPoint(4, 94));
+	  set_container_image(&time_digits_images[1], BIG_DIGIT_IMAGE_RESOURCE_IDS[display_hour%10], GPoint(37, 94));
+	  
 	  // Day of week
-	  text_layer_set_text(&DayOfWeekLayer, DAY_NAME_LANGUAGE[current_time->tm_wday]); 
+	  set_container_image(&day_name_image, DAY_NAME_IMAGE_RESOURCE_IDS[current_time->tm_wday], GPoint(4, 71));
 	  
 	  // Day
 	  set_container_image(&date_digits_images[0], DATENUM_IMAGE_RESOURCE_IDS[current_time->tm_mday/10], GPoint(day_month_x[0], 71));
@@ -535,10 +542,7 @@ void handle_init(AppContextRef ctx) {
   
 	resource_init_current_app(&APP_RESOURCES);
 	
-	// Load Fonts
-     // font_temperature = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FUTURA_40));
-
-	bmp_init_container(RESOURCE_ID_IMAGE_BACKGROUND, &background_image); //IMAGE_BACKGROUND_OLD without missing call/sms notification
+	bmp_init_container(RESOURCE_ID_IMAGE_BACKGROUND, &background_image);
 	layer_add_child(&window.layer, &background_image.layer.layer);
 
 	if (clock_is_24h_style()) {
@@ -551,84 +555,64 @@ void handle_init(AppContextRef ctx) {
 	}
 
 	// Moon Text
-	text_layer_init(&MoonLayer, GRect(88, 136, 50 /* width */, 14 /* height */));
-	layer_add_child(&background_image.layer.layer, &MoonLayer.layer);
+	text_layer_init(&MoonLayer, GRect(88, 136, 30, 16));
 	text_layer_set_text_color(&MoonLayer, GColorWhite);
 	text_layer_set_background_color(&MoonLayer, GColorClear);
 	text_layer_set_font(&MoonLayer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
+	layer_add_child(&background_image.layer.layer, &MoonLayer.layer);
 
 	// Nameday Text
-	text_layer_init(&ndLayer, GRect(5, 50, 85 /* width */, 14 /* height */));
-	layer_add_child(&background_image.layer.layer, &ndLayer.layer);
+	text_layer_init(&ndLayer, GRect(5, 50, 85, 16));
 	text_layer_set_text_color(&ndLayer, GColorWhite);
 	text_layer_set_background_color(&ndLayer, GColorClear);
 	text_layer_set_font(&ndLayer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
+	layer_add_child(&background_image.layer.layer, &ndLayer.layer);
 
 	// Calendar Week Text
-	text_layer_init(&cwLayer, GRect(90, 50, 49 /* width */, 14 /* height */));
-	layer_add_child(&background_image.layer.layer, &cwLayer.layer);
+	text_layer_init(&cwLayer, GRect(90, 50, 49, 16));
 	text_layer_set_text_color(&cwLayer, GColorWhite);
 	text_layer_set_background_color(&cwLayer, GColorClear);
 	text_layer_set_font(&cwLayer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
 	text_layer_set_text_alignment(&cwLayer, GTextAlignmentRight);
+	layer_add_child(&background_image.layer.layer, &cwLayer.layer);
 
 	// Sunrise Text
-	text_layer_init(&text_sunrise_layer, window.layer.frame);
+	text_layer_init(&text_sunrise_layer, GRect(7, 152, 29, 16));
 	text_layer_set_text_color(&text_sunrise_layer, GColorWhite);
 	text_layer_set_background_color(&text_sunrise_layer, GColorClear);
-	layer_set_frame(&text_sunrise_layer.layer, GRect(7, 152, 100, 14));
 	text_layer_set_font(&text_sunrise_layer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
 	layer_add_child(&window.layer, &text_sunrise_layer.layer);
 
 	// Sunset Text
-	text_layer_init(&text_sunset_layer, window.layer.frame);
+	text_layer_init(&text_sunset_layer, GRect(110, 152, 29, 16));
 	text_layer_set_text_color(&text_sunset_layer, GColorWhite);
 	text_layer_set_background_color(&text_sunset_layer, GColorClear);
-	layer_set_frame(&text_sunset_layer.layer, GRect(110, 152, 100, 14));
 	text_layer_set_font(&text_sunset_layer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
 	layer_add_child(&window.layer, &text_sunset_layer.layer); 
   
 	// Text for Temperature
-	text_layer_init(&text_temperature_layer, window.layer.frame);
+	text_layer_init(&text_temperature_layer, GRect(50, 1, 89, 44));
 	text_layer_set_text_color(&text_temperature_layer, GColorWhite);
 	text_layer_set_background_color(&text_temperature_layer, GColorClear);
-	layer_set_frame(&text_temperature_layer.layer, GRect(68, 3, 64, 68));
-	text_layer_set_font(&text_temperature_layer, fonts_get_system_font(FONT_KEY_GOTHAM_42_LIGHT)); //font_temperature
+	text_layer_set_font(&text_temperature_layer, fonts_get_system_font(FONT_KEY_GOTHAM_42_LIGHT));
+	text_layer_set_text_alignment(&text_temperature_layer, GTextAlignmentRight);
 	layer_add_child(&window.layer, &text_temperature_layer.layer);  
 
-	// Day of week text
-	text_layer_init(&DayOfWeekLayer, GRect(5, 62, 130 /* width */, 24 /* height */));
-	layer_add_child(&background_image.layer.layer, &DayOfWeekLayer.layer);
-	text_layer_set_text_color(&DayOfWeekLayer, GColorWhite);
-	text_layer_set_background_color(&DayOfWeekLayer, GColorClear);
-	text_layer_set_font(&DayOfWeekLayer, fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD));
-
 	// Calls Info layer
-	text_layer_init(&calls_layer, window.layer.frame);
+	text_layer_init(&calls_layer, GRect(12, 135, 22, 16));
 	text_layer_set_text_color(&calls_layer, GColorWhite);
 	text_layer_set_background_color(&calls_layer, GColorClear);
-	layer_set_frame(&calls_layer.layer, GRect(12, 135, 100, 14));
 	text_layer_set_font(&calls_layer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
 	layer_add_child(&window.layer, &calls_layer.layer);
 	text_layer_set_text(&calls_layer, "-");
 	
 	// SMS Info layer 
-	text_layer_init(&sms_layer, window.layer.frame);
+	text_layer_init(&sms_layer, GRect(41, 135, 22, 16));
 	text_layer_set_text_color(&sms_layer, GColorWhite);
 	text_layer_set_background_color(&sms_layer, GColorClear);
-	layer_set_frame(&sms_layer.layer, GRect(41, 135, 100, 14));
 	text_layer_set_font(&sms_layer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
 	layer_add_child(&window.layer, &sms_layer.layer);
 	text_layer_set_text(&sms_layer, "-");
-
-	// DEBUG Info layer 
-	//text_layer_init(&debug_layer, window.layer.frame);
-	//text_layer_set_text_color(&debug_layer, GColorWhite);
-	//text_layer_set_background_color(&debug_layer, GColorClear);
-	//layer_set_frame(&debug_layer.layer, GRect(50, 152, 100, 30));
-	//text_layer_set_font(&debug_layer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
-	//layer_add_child(&window.layer, &debug_layer.layer);
-	// text_layer_set_text(&debug_layer, "-");
 	
 	data.link_status = LinkStatusUnknown;
 	link_monitor_ping();
@@ -653,6 +637,7 @@ void handle_deinit(AppContextRef ctx) {
 
 	bmp_deinit_container(&background_image);
 	bmp_deinit_container(&time_format_image);
+	bmp_deinit_container(&day_name_image);
 
 	for (int i = 0; i < TOTAL_DATE_DIGITS; i++) {
 		bmp_deinit_container(&date_digits_images[i]);

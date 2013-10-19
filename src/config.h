@@ -51,11 +51,11 @@ const char *DAY_NAME_SLOVAK[] = {
 const char *MOONPHASE_TEXT_SLOVAK[] = {
 	"NOV",
 	"NOV+",
-	"1. ŠT",
+	"1. ŠT.",
 	"SPL-",
 	"SPLN",
 	"SPL+",
-	"3. ŠT",
+	"3. ŠT.",
 	"NOV-"
 };
 

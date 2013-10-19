@@ -30,31 +30,31 @@ float calcSun(int year, int month, int day, float latitude, float longitude, int
 
   //calculate the Sun's true longitude
   //L = M + (1.916 * sin(M)) + (0.020 * sin(2 * M)) + 282.634
-  float L = M + (1.916 * my_sin((M_PI/180.0f) * M)) + (0.020 * my_sin((M_PI/180.0f) * 2 * M)) + 282.634;
+  float L = M + (1.916 * my_sin(M_PI * M / 180.0f)) + (0.020 * my_sin(M_PI * M / 90.0f)) + 282.634;
   if (L<0) L+=360.0f;
   if (L>360) L-=360.0f;
 
   //5a. calculate the Sun's right ascension
   //RA = atan(0.91764 * tan(L))
-  float RA = (180.0f/M_PI) * my_atan(0.91764 * my_tan((M_PI/180.0f) * L));
+  float RA = (180.0f/M_PI) * my_atan(0.91764 * my_tan(M_PI * L / 180.0f));
   if (RA<0) RA+=360;
   if (RA>360) RA-=360;
 
   //5b. right ascension value needs to be in the same quadrant as L
-  float Lquadrant  = (my_floor( L/90)) * 90;
-  float RAquadrant = (my_floor(RA/90)) * 90;
+  float Lquadrant  = my_floor(L / 90.0f) * 90.0f;
+  float RAquadrant = my_floor(RA / 90.0f) * 90.0f;
   RA = RA + (Lquadrant - RAquadrant);
 
   //5c. right ascension value needs to be converted into hours
   RA = RA / 15;
 
   //6. calculate the Sun's declination
-  float sinDec = 0.39782 * my_sin((M_PI/180.0f) * L);
+  float sinDec = 0.39782 * my_sin(M_PI * L / 180.0f);
   float cosDec = my_cos(my_asin(sinDec));
 
   //7a. calculate the Sun's local hour angle
   //cosH = (cos(zenith) - (sinDec * sin(latitude))) / (cosDec * cos(latitude))
-  float cosH = (my_cos((M_PI/180.0f) * zenith) - (sinDec * my_sin((M_PI/180.0f) * latitude))) / (cosDec * my_cos((M_PI/180.0f) * latitude));
+  float cosH = (my_cos(M_PI * zenith / 180.0f) - (sinDec * my_sin(M_PI * latitude / 180.0f))) / (cosDec * my_cos(M_PI * latitude / 180.0f));
   
   if (cosH >  1) {
     return 0;
