@@ -1,6 +1,41 @@
 {
     "media": [
         {
+            "defName": "IMAGE_DAY_NAME_SUN",
+            "type": "png",
+            "file": "images/day_sun.png"
+        },
+        {
+            "defName": "IMAGE_DAY_NAME_MON",
+            "type": "png",
+            "file": "images/day_mon.png"
+        },
+        {
+            "defName": "IMAGE_DAY_NAME_TUE",
+            "type": "png",
+            "file": "images/day_tue.png"
+        },
+        {
+            "defName": "IMAGE_DAY_NAME_WED",
+            "type": "png",
+            "file": "images/day_wed.png"
+        },
+        {
+            "defName": "IMAGE_DAY_NAME_THU",
+            "type": "png",
+            "file": "images/day_thu.png"
+        },
+        {
+            "defName": "IMAGE_DAY_NAME_FRI",
+            "type": "png",
+            "file": "images/day_fri.png"
+        },
+        {
+            "defName": "IMAGE_DAY_NAME_SAT",
+            "type": "png",
+            "file": "images/day_sat.png"
+        },
+        {
             "defName": "NAMEDAYS_JAN_SVK",
             "type": "raw",
             "file": "data/namedays_jan_svk.dat"
