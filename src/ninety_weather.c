@@ -12,6 +12,7 @@
 
 // This is the Default APP_ID to work with old versions of httpebble
 //#define MY_UUID { 0x91, 0x41, 0xB6, 0x28, 0xBC, 0x89, 0x49, 0x8E, 0xB1, 0x47, 0x04, 0x9F, 0x49, 0xC0, 0x99, 0xAD } //httpebble (iOS)
+
 #define MY_UUID { 0x91, 0x41, 0xB6, 0x28, 0xBC, 0x89, 0x49, 0x8E, 0xB1, 0x47, 0x29, 0x08, 0xF1, 0x7C, 0x3F, 0xAD } //Pebble Connect with httpebble (Android)
 // MY_UUID changed because of problems when downloading from cloudpebble.net after successful build
 
@@ -20,7 +21,7 @@
 PBL_APP_INFO(
 		MY_UUID,
 		MY_APP, "mc1100",
-		0, 3, /* App major/minor version */
+		0, 4, /* App major/minor version */
 		RESOURCE_ID_IMAGE_MENU_ICON,
 		APP_INFO_WATCH_FACE);
 
@@ -514,11 +515,11 @@ void handle_minute_tick(AppContextRef ctx, PebbleTickEvent *t) {
 	
 	if(!located || !(t->tick_time->tm_min % 15))
 	{
-		// Every 20 minutes, request updated weather
+		// Every 15 minutes, request updated weather
 		http_location_request();
 	}
 	
-	// Every 20 minutes, request updated time
+	// Every 15 minutes, request updated time
 	http_time_request();
 	
 	if(!calculated_sunset_sunrise)
