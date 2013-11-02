@@ -512,7 +512,7 @@ void handle_minute_tick(AppContextRef ctx, PebbleTickEvent *t) {
 
     update_display(t->tick_time);
 	
-	if(!located || !(t->tick_time->tm_min % 20))
+	if(!located || !(t->tick_time->tm_min % 15))
 	{
 		// Every 20 minutes, request updated weather
 		http_location_request();
@@ -683,7 +683,7 @@ void request_weather() {
 	
 	// Build the HTTP request
 	DictionaryIterator *body;
-	HTTPResult result = http_out_get("https://ofkorth.net/pebble/weather.php", WEATHER_HTTP_COOKIE, &body);
+	HTTPResult result = http_out_get("http://www.zone-mr.net/api/weather.php", WEATHER_HTTP_COOKIE, &body);
 	if(result != HTTP_OK) {
 		return;
 	}

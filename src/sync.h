@@ -1,3 +1,4 @@
+
 #ifndef SYNC_H
 #define SYNC_H
 	
@@ -14,7 +15,7 @@ enum {
 };
 
 enum { REQUEST_DATA_KEY = 0x10, };
-enum { REQUEST_MISSED = 0x101, REQUEST_UNREAD = 0x102, };// TUPLE_INT
+enum { REQUEST_MISSED = 0x101, REQUEST_UNREAD = 0x102, };// TUPLE_INTEGER
 enum LinkStatus
 {
 	LinkStatusUnknown = 0,
@@ -35,4 +36,4 @@ static AppMessageCallbacksNode app_callbacks;
 
 void request_phone_state();
 
-#endif
+#endif 
