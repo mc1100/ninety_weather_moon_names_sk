@@ -7,9 +7,5 @@
 #define ZENITH_ASTRONOMICAL 108.0
 
 float calcSun(int year, int month, int day, float latitude, float longitude, int sunset, float zenith);
-float calcSunRise(int year, int month, int day, float latitude, float longitude, float zenith);
-float calcSunSet(int year, int month, int day, float latitude, float longitude, float zenith);
-int moon_phase(int y, int m, int d);
-void adjustTimezone(float* time);
 
 #endif

@@ -90,13 +90,3 @@ float calcSun(int year, int month, int day, float latitude, float longitude, int
 
   return UT;
 }
-
-float calcSunRise(int year, int month, int day, float latitude, float longitude, float zenith)
-{
-  return calcSun(year, month, day, latitude, longitude, 0, zenith);
-}
-
-float calcSunSet(int year, int month, int day, float latitude, float longitude, float zenith)
-{
-  return calcSun(year, month, day, latitude, longitude, 1, zenith);
-}

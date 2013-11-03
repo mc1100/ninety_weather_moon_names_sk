@@ -7,21 +7,20 @@
 #include "my_math.h"
 #include "suncalc.h"
 #include "http.h"
+#include "sync.h"
 #include "util.h"
-#include "link_monitor.h"
 
 // This is the Default APP_ID to work with old versions of httpebble
 //#define MY_UUID { 0x91, 0x41, 0xB6, 0x28, 0xBC, 0x89, 0x49, 0x8E, 0xB1, 0x47, 0x04, 0x9F, 0x49, 0xC0, 0x99, 0xAD } //httpebble (iOS)
 
 #define MY_UUID { 0x91, 0x41, 0xB6, 0x28, 0xBC, 0x89, 0x49, 0x8E, 0xB1, 0x47, 0x29, 0x08, 0xF1, 0x7C, 0x3F, 0xAD } //Pebble Connect with httpebble (Android)
-// MY_UUID changed because of problems when downloading from cloudpebble.net after successful build
 
 #define MY_APP "91 Weather Moon Names SK"
 
 PBL_APP_INFO(
 		MY_UUID,
 		MY_APP, "mc1100",
-		0, 4, /* App major/minor version */
+		0, 5, /* App major/minor version */
 		RESOURCE_ID_IMAGE_MENU_ICON,
 		APP_INFO_WATCH_FACE);
 
@@ -38,10 +37,9 @@ TextLayer calls_layer;				// layer for Phone Calls info
 TextLayer sms_layer;				// layer for SMS info
 //TextLayer debug_layer;			// layer for DEBUG info
 
-static int our_latitude, our_longitude, our_timezone = 99;	//dummy value because null and 0 are valid values
+static float our_latitude, our_longitude, our_timezone = 0;
 static bool located = false;
-static bool calculated_sunset_sunrise = false;
-static bool temperature_set = false;
+static bool time_received = false;
 
 const int DAY_NAME_IMAGE_RESOURCE_IDS[] = {
   RESOURCE_ID_IMAGE_DAY_NAME_SUN,
@@ -195,42 +193,31 @@ int moon_phase(int y, int m, int d) {
 }
 
 
-void adjustTimezone(float* time) {
-  *time += our_timezone;
-  if (*time > 24) *time -= 24;
-  if (*time < 0) *time += 24;
-}
-
-
 void updateSunsetSunrise() {
-	static char sunrise_text[] = "--:--";
-	static char sunset_text[]  = "--:--";
-	
+	static char sunrise_text[6];
+	static char sunset_text[6];
+
+	if (!located || !time_received) {
+	    text_layer_set_text(&text_sunrise_layer, "--:--");
+	    text_layer_set_text(&text_sunset_layer, "--:--");
+
+		return;
+	}
+
 	PblTm pblTime;
 	get_time(&pblTime);
 
 	char *time_format;
 
-	if (clock_is_24h_style()) 
-	{
-	  time_format = "%R";
-	} 
-	else 
-	{
-	  time_format = "%I:%M";
+	if (clock_is_24h_style()) {
+		time_format = "%R";
+	} else {
+		time_format = "%I:%M";
 	}
 
-	float sunriseTime = calcSunRise(pblTime.tm_year, pblTime.tm_mon+1, pblTime.tm_mday, our_latitude / 10000, our_longitude / 10000, ZENITH_OFFICIAL);
-	float sunsetTime = calcSunSet(pblTime.tm_year, pblTime.tm_mon+1, pblTime.tm_mday, our_latitude / 10000, our_longitude / 10000, ZENITH_OFFICIAL);
-	adjustTimezone(&sunriseTime);
-	adjustTimezone(&sunsetTime);
+	float sunriseTime = calcSun(pblTime.tm_year, pblTime.tm_mon+1, pblTime.tm_mday, our_latitude, our_longitude, 0, ZENITH_OFFICIAL) + our_timezone;
+	float sunsetTime = calcSun(pblTime.tm_year, pblTime.tm_mon+1, pblTime.tm_mday, our_latitude, our_longitude, 1, ZENITH_OFFICIAL) + our_timezone;
 	
-	if (!pblTime.tm_isdst) 
-	{
-	  sunriseTime+=1;
-	  sunsetTime+=1;
-	} 
-
 	pblTime.tm_min = (int)(60*(sunriseTime-((int)(sunriseTime))));
 	pblTime.tm_hour = (int)sunriseTime;
 	string_format_time(sunrise_text, sizeof(sunrise_text), time_format, &pblTime);
@@ -243,100 +230,67 @@ void updateSunsetSunrise() {
 }
 
 
-unsigned short the_last_hour = 25; //dummy value because null and 0 are valid values
+unsigned short the_last_hour = 25;
 
 void request_weather();
 
-void display_counters(TextLayer *dataLayer, struct Data d, int infoType) {
-	
-	static char temp_text[5];
-	
-	if(d.link_status != LinkStatusOK){
-		memcpy(temp_text, "-", 1);
-	}
-	else {	
-		if (infoType == 1) {
-			if(d.missed) {
-				memcpy(temp_text, itoa(d.missed), 4);
-			}
-			else {
-				memcpy(temp_text, itoa(0), 4);
-			}
-		}
-		else if(infoType == 2) {
-			if(d.unread) {
-				memcpy(temp_text, itoa(d.unread), 4);
-			}
-			else {
-				memcpy(temp_text, itoa(0), 4);
-			}
-		}
-	}
-	
-	text_layer_set_text(dataLayer, temp_text);
-}
-
 
 void failed(int32_t cookie, int http_status, void* context) {
-	
-	if((cookie == 0 || cookie == WEATHER_HTTP_COOKIE) && !temperature_set) {
-		set_container_image(&weather_images[0], WEATHER_IMAGE_RESOURCE_IDS[11], GPoint(4, 5));   // Error Image ToDo: diff between http and BT error
-		//text_layer_set_text(&text_temperature_layer, "°"); // for what? do not show ° alone 
+	if (cookie == 0 || cookie == WEATHER_HTTP_COOKIE) {
+		set_container_image(&weather_images[0], WEATHER_IMAGE_RESOURCE_IDS[11], GPoint(4, 5)); // Error Image ToDo: diff between http and BT error
+		text_layer_set_text(&text_temperature_layer, "");
 	}
-	
-	//link_monitor_handle_failure(http_status);
-	//located = false; //Re-request the location and subsequently weather on next minute tick
 }
 
 
 void success(int32_t cookie, int http_status, DictionaryIterator* received, void* context) {
-	
-	if(cookie != WEATHER_HTTP_COOKIE) return;
-	
-	Tuple* icon_tuple = dict_find(received, WEATHER_KEY_ICON);
-	if(icon_tuple) {
-		int icon = icon_tuple->value->int8;
-		if(icon >= 0 && icon <= 9) {
-			set_container_image(&weather_images[0], WEATHER_IMAGE_RESOURCE_IDS[icon], GPoint(4, 5)); // Weather Image
-		} else {
-			set_container_image(&weather_images[0], WEATHER_IMAGE_RESOURCE_IDS[10], GPoint(4, 5));   // Error Image ToDo: diff between http and BT error
-		}
+	if (cookie != WEATHER_HTTP_COOKIE) {
+		return;
 	}
-	
-	Tuple* temperature_tuple = dict_find(received, WEATHER_KEY_TEMPERATURE);
-	if(temperature_tuple) {
-		
-		static char temp_text[6];
-		memcpy(temp_text, itoa(temperature_tuple->value->int16), 4);
+
+	Tuple* data_tuple = dict_find(received, WEATHER_KEY_CURRENT);
+	if (data_tuple){
+		uint16_t value = data_tuple->value->int16;
+		uint8_t icon = value >> 11;
+		if (icon > 10) {
+			icon = 10;
+		}
+		set_container_image(&weather_images[0], WEATHER_IMAGE_RESOURCE_IDS[icon], GPoint(4, 5));
+		int16_t temp = value & 0x3ff;
+		if (value & 0x400) {
+			temp = -temp;
+		}
+		static char temp_text[8];
+		memcpy(temp_text, itoa(temp), 4);
 		int degree_pos = strlen(temp_text);
 		memcpy(&temp_text[degree_pos], " °", 4);
 		text_layer_set_text(&text_temperature_layer, temp_text);
-		temperature_set = true;
 	} else {
-		text_layer_set_text(&text_temperature_layer, ""); // do not show ° alone 
+		set_container_image(&weather_images[0], WEATHER_IMAGE_RESOURCE_IDS[10], GPoint(4, 5));
+		text_layer_set_text(&text_temperature_layer, "");
 	}
-	
-	link_monitor_handle_success(&data); //Notify the user of reconnection (vibrate)
 }
 
 
 void location(float latitude, float longitude, float altitude, float accuracy, void* context) {
 	// fix the floats
-	our_latitude = latitude * 10000;
-	our_longitude = longitude * 10000;
+	our_latitude = latitude;
+	our_longitude = longitude;
 	located = true;
+
+	updateSunsetSunrise();
 	request_weather();
 }
 
 
 void reconnect(void* context) {
+	time_received = false;
 	located = false;
-	request_weather();
+	request_phone_state();
 }
 
 
 bool read_state_data(DictionaryIterator* received, struct Data* d) {
-	(void)d;
 	bool has_data = false;
 	Tuple* tuple = dict_read_first(received);
 	if(!tuple) return false;
@@ -365,55 +319,45 @@ bool read_state_data(DictionaryIterator* received, struct Data* d) {
 	}
 	
 	while((tuple = dict_read_next(received)));
+
 	return has_data;
 }
 
 
 void app_received_msg(DictionaryIterator* received, void* context) {
-	link_monitor_handle_success(&data);
-	if(read_state_data(received, &data)) 
-	{
-		if(!located)
-		{
-			request_weather();
+	if (read_state_data(received, &data)) {
+		if (!time_received) {
+			http_time_request();
+		}
+		if (!located) {
+			http_location_request();
 		}
 	}
-}
-
-
-static void app_send_failed(DictionaryIterator* failed, AppMessageResult reason, void* context) {
-	link_monitor_handle_failure(reason, &data);
 }
 
 
 bool register_callbacks() {
 	if (callbacks_registered) {
-		if (app_message_deregister_callbacks(&app_callbacks) == APP_MSG_OK)
+		if (app_message_deregister_callbacks(&app_callbacks) == APP_MSG_OK) {
 			callbacks_registered = false;
+		}
 	}
 	if (!callbacks_registered) {
-		app_callbacks = (AppMessageCallbacksNode){
-			.callbacks = { .in_received = app_received_msg, .out_failed = app_send_failed} };
+		app_callbacks = (AppMessageCallbacksNode) {
+			.callbacks = { .in_received = app_received_msg }
+		};
 		if (app_message_register_callbacks(&app_callbacks) == APP_MSG_OK) {
 			callbacks_registered = true;
 		}
-	 }
+	}
+
 	return callbacks_registered;
 }
 
 
 void receivedtime(int32_t utc_offset_seconds, bool is_dst, uint32_t unixtime, const char* tz_name, void* context) {
-	our_timezone = (utc_offset_seconds / 3600);
-	if (is_dst)
-	{
-		our_timezone--;
-	}
-	
-	if (located && our_timezone != 99 && !calculated_sunset_sunrise)
-    {
-        updateSunsetSunrise();
-	  calculated_sunset_sunrise = true;
-    }
+	our_timezone = (utc_offset_seconds / 3600.0f);
+	time_received = true;
 }
 
 
@@ -434,16 +378,16 @@ void update_display(PblTm *current_time) {
 	  set_container_image(&day_name_image, DAY_NAME_IMAGE_RESOURCE_IDS[current_time->tm_wday], GPoint(4, 71));
 	  
 	  // Day
-	  set_container_image(&date_digits_images[0], DATENUM_IMAGE_RESOURCE_IDS[current_time->tm_mday/10], GPoint(day_month_x[0], 71));
-	  set_container_image(&date_digits_images[1], DATENUM_IMAGE_RESOURCE_IDS[current_time->tm_mday%10], GPoint(day_month_x[0] + 13, 71));
+	  set_container_image(&date_digits_images[0], DATENUM_IMAGE_RESOURCE_IDS[current_time->tm_mday/10], GPoint(55, 71));
+	  set_container_image(&date_digits_images[1], DATENUM_IMAGE_RESOURCE_IDS[current_time->tm_mday%10], GPoint(68, 71));
 	  
 	  // Month
-	  set_container_image(&date_digits_images[2], DATENUM_IMAGE_RESOURCE_IDS[(current_time->tm_mon+1)/10], GPoint(day_month_x[1], 71));
-	  set_container_image(&date_digits_images[3], DATENUM_IMAGE_RESOURCE_IDS[(current_time->tm_mon+1)%10], GPoint(day_month_x[1] + 13, 71));
+	  set_container_image(&date_digits_images[2], DATENUM_IMAGE_RESOURCE_IDS[(current_time->tm_mon+1)/10], GPoint(87, 71));
+	  set_container_image(&date_digits_images[3], DATENUM_IMAGE_RESOURCE_IDS[(current_time->tm_mon+1)%10], GPoint(100, 71));
 	  
 	  // Year
-	  set_container_image(&date_digits_images[4], DATENUM_IMAGE_RESOURCE_IDS[((1900+current_time->tm_year)%1000)/10], GPoint(day_month_x[2], 71));
-	  set_container_image(&date_digits_images[5], DATENUM_IMAGE_RESOURCE_IDS[((1900+current_time->tm_year)%1000)%10], GPoint(day_month_x[2] + 13, 71));
+	  set_container_image(&date_digits_images[4], DATENUM_IMAGE_RESOURCE_IDS[((1900+current_time->tm_year)%1000)/10], GPoint(115, 71));
+	  set_container_image(&date_digits_images[5], DATENUM_IMAGE_RESOURCE_IDS[((1900+current_time->tm_year)%1000)%10], GPoint(128, 71));
 
 	  if (!clock_is_24h_style()) {
 		if (current_time->tm_hour >= 12) {
@@ -458,20 +402,19 @@ void update_display(PblTm *current_time) {
 		  bmp_deinit_container(&time_digits_images[0]);
 		}
 	  }
-	  
-	  // -------------------- Moon_phase
-	  int moonphase_number;
-	  moonphase_number = moon_phase(current_time->tm_year+1900,current_time->tm_mon,current_time->tm_mday);
 
-	  set_container_image(&moon_digits_images[0], MOON_IMAGE_RESOURCE_IDS[moonphase_number], GPoint(61, 143));  // ---------- Moon phase Image
-	  text_layer_set_text(&MoonLayer, MOONPHASE_NAME_LANGUAGE[moonphase_number]);
-	  // -------------------- Moon_phase
-	 
-	  
-	  // -------------------- Nameday
-	  static uint8_t buffer[512];
-	  static const char *name;
 	  if (the_last_hour == 25 || !current_time->tm_hour) {
+		  // -------------------- Moon_phase
+		  int moonphase_number;
+		  moonphase_number = moon_phase(current_time->tm_year+1900,current_time->tm_mon,current_time->tm_mday);
+
+		  set_container_image(&moon_digits_images[0], MOON_IMAGE_RESOURCE_IDS[moonphase_number], GPoint(61, 143));  // ---------- Moon phase Image
+		  text_layer_set_text(&MoonLayer, MOONPHASE_NAME_LANGUAGE[moonphase_number]);
+		  // -------------------- Moon_phase
+
+		  // -------------------- Nameday
+		  static uint8_t buffer[512];
+		  static const char *name;
 		  int day_number = current_time->tm_mday - 1;
 		  if (the_last_hour == 25 || !day_number) {
 			  ResHandle rh = resource_get_handle(NAMEDAYS_BLOB_RESOURCE_IDS[current_time->tm_mon]);
@@ -491,51 +434,38 @@ void update_display(PblTm *current_time) {
 			  } while (*name);
 			  ++name;
 		  }
-	  }
-	  text_layer_set_text(&ndLayer, name);
-	  // -------------------- Nameday  
+		  text_layer_set_text(&ndLayer, name);
+		  // -------------------- Nameday
 
-	  // -------------------- Calendar_week  
-	  static char cw_text[] = "888D/88T";
-	  string_format_time(cw_text, sizeof(cw_text), TRANSLATION_CW , current_time);
-	  text_layer_set_text(&cwLayer, cw_text); 
-	  // ------------------- Calendar week
-	  
-	  
+		  // -------------------- Calendar_week  
+		  static char cw_text[] = "888D/88T";
+		  string_format_time(cw_text, sizeof(cw_text), TRANSLATION_DAY_WEEK, current_time);
+		  text_layer_set_text(&cwLayer, cw_text); 
+		  // ------------------- Calendar week
+	  }
+
 	  the_last_hour = display_hour;
   }
-	
 }
 
 
 void handle_minute_tick(AppContextRef ctx, PebbleTickEvent *t) {
-  (void)ctx;	
-
     update_display(t->tick_time);
-	
-	if(!located || !(t->tick_time->tm_min % 15))
-	{
-		// Every 15 minutes, request updated weather
-		http_location_request();
+
+	if (data.link_status == LinkStatusUnknown) {
+		request_phone_state();
+	} else {
+		if (!(t->tick_time->tm_min % 15)) {
+			time_received = false;
+			located = false;
+			http_time_request();
+			http_location_request();
+		}
 	}
-	
-	// Every 15 minutes, request updated time
-	http_time_request();
-	
-	if(!calculated_sunset_sunrise)
-    {
-	    // Start with some default values
-	    text_layer_set_text(&text_sunrise_layer, "--:--");
-	    text_layer_set_text(&text_sunset_layer, "--:--");
-    }
-	
-	if(!(t->tick_time->tm_min % 2) || data.link_status == LinkStatusUnknown) link_monitor_ping();
 }
 
 
 void handle_init(AppContextRef ctx) {
-  (void)ctx;
-
 	window_init(&window, MY_APP);
 	window_stack_push(&window, true /* Animated */);
   
@@ -583,6 +513,7 @@ void handle_init(AppContextRef ctx) {
 	text_layer_set_background_color(&text_sunrise_layer, GColorClear);
 	text_layer_set_font(&text_sunrise_layer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
 	layer_add_child(&window.layer, &text_sunrise_layer.layer);
+	text_layer_set_text(&text_sunrise_layer, "--:--");
 
 	// Sunset Text
 	text_layer_init(&text_sunset_layer, GRect(110, 152, 29, 16));
@@ -590,12 +521,13 @@ void handle_init(AppContextRef ctx) {
 	text_layer_set_background_color(&text_sunset_layer, GColorClear);
 	text_layer_set_font(&text_sunset_layer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
 	layer_add_child(&window.layer, &text_sunset_layer.layer); 
+	text_layer_set_text(&text_sunset_layer, "--:--");
   
 	// Text for Temperature
 	text_layer_init(&text_temperature_layer, GRect(50, 1, 89, 44));
 	text_layer_set_text_color(&text_temperature_layer, GColorWhite);
 	text_layer_set_background_color(&text_temperature_layer, GColorClear);
-	text_layer_set_font(&text_temperature_layer, fonts_get_system_font(FONT_KEY_GOTHAM_42_LIGHT));
+	text_layer_set_font(&text_temperature_layer, fonts_get_system_font(FONT_KEY_BITHAM_42_LIGHT));
 	text_layer_set_text_alignment(&text_temperature_layer, GTextAlignmentRight);
 	layer_add_child(&window.layer, &text_temperature_layer.layer);  
 
@@ -616,14 +548,23 @@ void handle_init(AppContextRef ctx) {
 	text_layer_set_text(&sms_layer, "-");
 	
 	data.link_status = LinkStatusUnknown;
-	link_monitor_ping();
 	
 	// request data refresh on window appear (for example after notification)
-	WindowHandlers handlers = { .appear = &link_monitor_ping};
+	WindowHandlers handlers = { .appear = &request_phone_state };
 	window_set_window_handlers(&window, handlers);
 	
-    http_register_callbacks((HTTPCallbacks){.failure=failed,.success=success,.reconnect=reconnect,.location=location,.time=receivedtime}, (void*)ctx);
-    register_callbacks();
+    http_register_callbacks(
+		(HTTPCallbacks) {
+			.failure = failed,
+			.success = success,
+			.reconnect = reconnect,
+			.location = location,
+			.time = receivedtime
+		},
+		(void*)ctx
+	);
+
+	register_callbacks();
 	
     // avoids a blank screen on watch start
     PblTm tick_time;
@@ -634,8 +575,6 @@ void handle_init(AppContextRef ctx) {
 
 
 void handle_deinit(AppContextRef ctx) {
-	(void)ctx;
-
 	bmp_deinit_container(&background_image);
 	bmp_deinit_container(&time_format_image);
 	bmp_deinit_container(&day_name_image);
@@ -651,53 +590,45 @@ void handle_deinit(AppContextRef ctx) {
 	for (int i = 0; i < TOTAL_MOON_DIGITS; i++) {
 		bmp_deinit_container(&moon_digits_images[i]);
 	}
-	
-	//fonts_unload_custom_font(font_temperature);
 }
 
 
 void pbl_main(void *params) {
-  PebbleAppHandlers handlers = {
-    .init_handler = &handle_init,
-    .deinit_handler = &handle_deinit,
-    .tick_info = {
-      .tick_handler = &handle_minute_tick,
-      .tick_units = MINUTE_UNIT
-    },
-	.messaging_info = {
-		.buffer_sizes = {
-			.inbound = 124,
-			.outbound = 256,
+	PebbleAppHandlers handlers = {
+		.init_handler = &handle_init,
+		.deinit_handler = &handle_deinit,
+		.tick_info = {
+			.tick_handler = &handle_minute_tick,
+			.tick_units = MINUTE_UNIT
+		},
+		.messaging_info = {
+			.buffer_sizes = {
+				.inbound = 124,
+				.outbound = 256,
+			}
 		}
-	}
-  };
-  app_event_loop(params, &handlers);
+	};
+
+	app_event_loop(params, &handlers);
 }
 
 
 void request_weather() {
-	
-	if(!located) {
-		http_location_request();
-		return;
-	}
-	
-	// Build the HTTP request
-	DictionaryIterator *body;
-	HTTPResult result = http_out_get("http://www.zone-mr.net/api/weather.php", WEATHER_HTTP_COOKIE, &body);
-	if(result != HTTP_OK) {
+	if (!located) {
 		return;
 	}
 
-	dict_write_int32(body, WEATHER_KEY_LATITUDE, our_latitude);
-	dict_write_int32(body, WEATHER_KEY_LONGITUDE, our_longitude);
-	dict_write_cstring(body, WEATHER_KEY_UNIT_SYSTEM, UNIT_SYSTEM);
-	
-	// Send it.
-	if(http_out_send() != HTTP_OK) {
+	// Build the HTTP request
+	DictionaryIterator *body;
+	HTTPResult result = http_out_get("http://pwdb.kathar.in/pebble/weather3.php", WEATHER_HTTP_COOKIE, &body);
+	if (result != HTTP_OK) {
 		return;
 	}
-	
-	// Request updated Time
-	http_time_request();
+
+	dict_write_int32(body, WEATHER_KEY_LATITUDE, (int)(our_latitude * 10000));
+	dict_write_int32(body, WEATHER_KEY_LONGITUDE, (int)(our_longitude * 10000));
+	dict_write_cstring(body, WEATHER_KEY_UNIT_SYSTEM, UNIT_SYSTEM);
+
+	// Send it.
+	http_out_send();
 }

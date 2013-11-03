@@ -28,7 +28,7 @@ static struct Data {
 	uint8_t missed;
   	uint8_t unread;
 	enum LinkStatus link_status;
-} data = {.info = "XXX calls, XXX sms. #00", .missed = 11, .unread=11};
+} data = { .info = "XXX calls, XXX sms. #00", .missed = 0, .unread = 0 };
 
 
 static bool callbacks_registered;
