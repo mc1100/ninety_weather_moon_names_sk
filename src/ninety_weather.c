@@ -20,7 +20,7 @@
 PBL_APP_INFO(
         MY_UUID,
         MY_APP, "mc1100",
-        0, 6, /* App major/minor version */
+        0, 7, /* App major/minor version */
         RESOURCE_ID_IMAGE_MENU_ICON,
         APP_INFO_WATCH_FACE
 );
@@ -217,19 +217,13 @@ void updateSunsetSunrise() {
 }
 
 void failed(int32_t cookie, int http_status, void* context) {
-    if (cookie != WEATHER_HTTP_COOKIE) {
-        return;
+    if (cookie == WEATHER_HTTP_COOKIE) {
+        set_container_image(&weather_image, WEATHER_IMAGE_RESOURCE_IDS[11], GPoint(4, 5));
+        text_layer_set_text(&text_temperature_layer, "");
     }
-
-    set_container_image(&weather_image, WEATHER_IMAGE_RESOURCE_IDS[11], GPoint(4, 5));
-    text_layer_set_text(&text_temperature_layer, "");
 }
 
 void success(int32_t cookie, int http_status, DictionaryIterator* received, void* context) {
-    if (cookie != WEATHER_HTTP_COOKIE) {
-        return;
-    }
-
     Tuple* data_tuple = dict_find(received, WEATHER_KEY_CURRENT);
     if (data_tuple) {
         uint16_t value = data_tuple->value->int16;
@@ -247,19 +241,20 @@ void success(int32_t cookie, int http_status, DictionaryIterator* received, void
         int degree_pos = strlen(temp_text);
         memcpy(&temp_text[degree_pos], " °", 4);
         text_layer_set_text(&text_temperature_layer, temp_text);
-    } else {
+    } else if (cookie == WEATHER_HTTP_COOKIE) {
         set_container_image(&weather_image, WEATHER_IMAGE_RESOURCE_IDS[10], GPoint(4, 5));
         text_layer_set_text(&text_temperature_layer, "");
     }
 }
 
 void location(float latitude, float longitude, float altitude, float accuracy, void* context) {
-    // fix the floats
     our_latitude = latitude;
     our_longitude = longitude;
     located = true;
 
-    updateSunsetSunrise();
+    if (time_received) {
+        updateSunsetSunrise();
+    }
     request_weather();
 }
 
@@ -276,7 +271,7 @@ bool read_state_data(DictionaryIterator* received, struct Data* d) {
         return false;
     }
 
-	do {
+    do {
         switch (tuple->key) {
         case TUPLE_MISSED_CALLS:
             d->missed = tuple->value->uint8;
@@ -334,7 +329,9 @@ void receivedtime(int32_t utc_offset_seconds, bool is_dst, uint32_t unixtime, co
     our_timezone = (utc_offset_seconds / 3600.0f);
     time_received = true;
 
-	updateSunsetSunrise();
+    if (located) {
+        updateSunsetSunrise();
+    }
 }
 
 void update_display(PblTm *current_time) {
@@ -349,23 +346,6 @@ void update_display(PblTm *current_time) {
         set_container_image(&time_digits_images[0], BIG_DIGIT_IMAGE_RESOURCE_IDS[display_hour / 10], GPoint(4, 94));
         set_container_image(&time_digits_images[1], BIG_DIGIT_IMAGE_RESOURCE_IDS[display_hour % 10], GPoint(37, 94));
 
-        // Day of week
-        set_container_image(&day_name_image, DAY_NAME_IMAGE_RESOURCE_IDS[current_time->tm_wday], GPoint(4, 71));
-
-        // Day
-        set_container_image(&date_digits_images[0], DATENUM_IMAGE_RESOURCE_IDS[current_time->tm_mday / 10], GPoint(55, 71));
-        set_container_image(&date_digits_images[1], DATENUM_IMAGE_RESOURCE_IDS[current_time->tm_mday % 10], GPoint(68, 71));
-
-        // Month
-        set_container_image(&date_digits_images[2], DATENUM_IMAGE_RESOURCE_IDS[(current_time->tm_mon + 1) / 10], GPoint(87, 71));
-        set_container_image(&date_digits_images[3], DATENUM_IMAGE_RESOURCE_IDS[(current_time->tm_mon + 1) % 10], GPoint(100, 71));
-
-        // Year
-        set_container_image(&date_digits_images[4], DATENUM_IMAGE_RESOURCE_IDS[((1900 + current_time->tm_year) % 1000) / 10],
-                GPoint(115, 71));
-        set_container_image(&date_digits_images[5], DATENUM_IMAGE_RESOURCE_IDS[((1900 + current_time->tm_year) % 1000) % 10],
-                GPoint(128, 71));
-
         if (!clock_is_24h_style()) {
             if (current_time->tm_hour >= 12) {
                 set_container_image(&time_format_image, RESOURCE_ID_IMAGE_PM_MODE, GPoint(118, 140));
@@ -374,13 +354,30 @@ void update_display(PblTm *current_time) {
                 bmp_deinit_container(&time_format_image);
             }
 
-            if (display_hour / 10 == 0) {
+            if (!(display_hour / 10)) {
                 layer_remove_from_parent(&time_digits_images[0].layer.layer);
                 bmp_deinit_container(&time_digits_images[0]);
             }
         }
 
         if (the_last_hour == 25 || !current_time->tm_hour) {
+            // Day of week
+            set_container_image(&day_name_image, DAY_NAME_IMAGE_RESOURCE_IDS[current_time->tm_wday], GPoint(4, 71));
+
+            // Day
+            set_container_image(&date_digits_images[0], DATENUM_IMAGE_RESOURCE_IDS[current_time->tm_mday / 10], GPoint(55, 71));
+            set_container_image(&date_digits_images[1], DATENUM_IMAGE_RESOURCE_IDS[current_time->tm_mday % 10], GPoint(68, 71));
+
+            // Month
+            set_container_image(&date_digits_images[2], DATENUM_IMAGE_RESOURCE_IDS[(current_time->tm_mon + 1) / 10], GPoint(87, 71));
+            set_container_image(&date_digits_images[3], DATENUM_IMAGE_RESOURCE_IDS[(current_time->tm_mon + 1) % 10], GPoint(100, 71));
+
+            // Year
+            set_container_image(&date_digits_images[4], DATENUM_IMAGE_RESOURCE_IDS[((1900 + current_time->tm_year) % 1000) / 10],
+                    GPoint(115, 71));
+            set_container_image(&date_digits_images[5], DATENUM_IMAGE_RESOURCE_IDS[((1900 + current_time->tm_year) % 1000) % 10],
+                    GPoint(128, 71));
+
             // moon phase
             int moonphase_number;
             moonphase_number = moon_phase(current_time->tm_year + 1900, current_time->tm_mon, current_time->tm_mday);
@@ -409,7 +406,7 @@ void update_display(PblTm *current_time) {
             text_layer_set_text(&ndLayer, name);
 
             // day & calendar week
-            static char cw_text[] = "888D/88T";
+            static char cw_text[] = "D888/T88";
             string_format_time(cw_text, sizeof(cw_text), TRANSLATION_DAY_WEEK, current_time);
             text_layer_set_text(&cwLayer, cw_text);
         }
@@ -421,13 +418,17 @@ void update_display(PblTm *current_time) {
 void handle_minute_tick(AppContextRef ctx, PebbleTickEvent *t) {
     update_display(t->tick_time);
 
+    if (!(t->tick_time->tm_min % 15)) {
+        located = false;
+        time_received = false;
+    }
     if (data.link_status == LinkStatusUnknown) {
         request_phone_state();
     } else {
-        if (!(t->tick_time->tm_min % 15)) {
-            located = false;
-            time_received = false;
+        if (!located) {
             http_location_request();
+        }
+        if (!time_received) {
             http_time_request();
         }
     }
@@ -498,6 +499,7 @@ void handle_init(AppContextRef ctx) {
     text_layer_set_font(&text_temperature_layer, fonts_get_system_font(FONT_KEY_BITHAM_42_LIGHT));
     text_layer_set_text_alignment(&text_temperature_layer, GTextAlignmentRight);
     layer_add_child(&window.layer, &text_temperature_layer.layer);
+    text_layer_set_text(&text_temperature_layer, "- °");
 
     // Calls Info layer
     text_layer_init(&calls_layer, GRect(12, 135, 22, 16));
@@ -576,10 +578,6 @@ void pbl_main(void *params) {
 }
 
 void request_weather() {
-    if (!located) {
-        return;
-    }
-
     // Build the HTTP request
     DictionaryIterator *body;
     HTTPResult result = http_out_get("http://pwdb.kathar.in/pebble/weather3.php", WEATHER_HTTP_COOKIE, &body);
