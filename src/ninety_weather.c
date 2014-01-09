@@ -1,67 +1,77 @@
-#include "pebble_os.h"
-#include "pebble_app.h"
-#include "pebble_fonts.h"
+#include "pebble.h"
 #include "stdlib.h"
 #include "string.h"
 #include "config.h"
 #include "my_math.h"
 #include "suncalc.h"
-#include "http.h"
-#include "sync.h"
+//#include "http.h"
+//#include "sync.h"
 #include "util.h"
 
-// This is the Default APP_ID to work with old versions of httpebble
-//#define MY_UUID { 0x91, 0x41, 0xB6, 0x28, 0xBC, 0x89, 0x49, 0x8E, 0xB1, 0x47, 0x04, 0x9F, 0x49, 0xC0, 0x99, 0xAD } // httpebble (iOS)
+static Window *window = NULL;
 
-#define MY_UUID { 0x91, 0x41, 0xB6, 0x28, 0xBC, 0x89, 0x49, 0x8E, 0xB1, 0x47, 0x29, 0x08, 0xF1, 0x7C, 0x3F, 0xAD } // Pebble Connect with httpebble (Android)
+static GBitmap *background_image = NULL;
+static BitmapLayer *background_layer = NULL;
 
-#define MY_APP "91 Weather Moon Names SK"
+static GBitmap *time_format_image = NULL;
+static BitmapLayer *time_format_layer = NULL;
 
-PBL_APP_INFO(
-        MY_UUID,
-        MY_APP, "mc1100",
-        0, 7, /* App major/minor version */
-        RESOURCE_ID_IMAGE_MENU_ICON,
-        APP_INFO_WATCH_FACE
-);
+static GBitmap *day_name_image = NULL;
+static BitmapLayer *day_name_layer = NULL;
 
-Window window;
-BmpContainer background_image;
-BmpContainer day_name_image;
-BmpContainer time_format_image;
-BmpContainer weather_image;
-BmpContainer moon_phase_image;
+static GBitmap *weather_image = NULL;
+static BitmapLayer *weather_layer = NULL;
 
-#define TOTAL_DATE_DIGITS 8
-BmpContainer date_digits_images[TOTAL_DATE_DIGITS];
+static GBitmap *moon_phase_image = NULL;
+static BitmapLayer *moon_phase_layer = NULL;
+
+#define TOTAL_DATE_DIGITS 6
+static GBitmap *date_digits_images[TOTAL_DATE_DIGITS] = { NULL, NULL, NULL, NULL, NULL, NULL };
+static BitmapLayer *date_digits_layers[TOTAL_DATE_DIGITS] = { NULL, NULL, NULL, NULL, NULL, NULL };
 
 #define TOTAL_TIME_DIGITS 4
-BmpContainer time_digits_images[TOTAL_TIME_DIGITS];
+static GBitmap *time_digits_images[TOTAL_TIME_DIGITS] = { NULL, NULL, NULL, NULL };
+static BitmapLayer *time_digits_layers[TOTAL_TIME_DIGITS] = { NULL, NULL, NULL, NULL };
 
-TextLayer ndLayer;
-TextLayer cwLayer;
-TextLayer text_sunrise_layer;
-TextLayer text_sunset_layer;
-TextLayer text_temperature_layer;
-TextLayer MoonLayer;
-TextLayer calls_layer;
-TextLayer sms_layer;
+static TextLayer *nd_layer = NULL;
+static TextLayer *cw_layer = NULL;
+static TextLayer *calls_layer = NULL;
+static TextLayer *text_temperature_layer = NULL;
+static TextLayer *sms_layer = NULL;
+static TextLayer *moon_layer = NULL;
+static TextLayer *text_sunrise_layer = NULL;
+static TextLayer *text_sunset_layer = NULL;
 
-float our_latitude;
-float our_longitude;
-float our_timezone;
-bool located = false;
-bool time_received = false;
-unsigned short the_last_hour = 25;
+static AppSync sync;
+static uint8_t sync_buffer[64];
+static AppSync sync;
+static uint8_t sync_buffer[64];
 
-const int const DAY_NAME_IMAGE_RESOURCE_IDS[] = {
-        RESOURCE_ID_IMAGE_DAY_NAME_SUN,
-        RESOURCE_ID_IMAGE_DAY_NAME_MON,
-        RESOURCE_ID_IMAGE_DAY_NAME_TUE,
-        RESOURCE_ID_IMAGE_DAY_NAME_WED,
-        RESOURCE_ID_IMAGE_DAY_NAME_THU,
-        RESOURCE_ID_IMAGE_DAY_NAME_FRI,
-        RESOURCE_ID_IMAGE_DAY_NAME_SAT
+enum WeatherKey {
+    WEATHER_ICON_KEY = 0x0,         // TUPLE_INT
+    WEATHER_TEMPERATURE_KEY = 0x1,  // TUPLE_CSTRING
+    WEATHER_CITY_KEY = 0x2,         // TUPLE_CSTRING
+};
+
+static float our_latitude;
+static float our_longitude;
+static float our_timezone;
+//static bool located = false;
+//static bool time_received = false;
+static unsigned short the_last_hour = 25;
+
+const int const BIG_DIGIT_IMAGE_RESOURCE_IDS[] = {
+        RESOURCE_ID_IMAGE_NUM_0,
+        RESOURCE_ID_IMAGE_NUM_1,
+        RESOURCE_ID_IMAGE_NUM_2,
+        RESOURCE_ID_IMAGE_NUM_3,
+        RESOURCE_ID_IMAGE_NUM_4,
+        RESOURCE_ID_IMAGE_NUM_5,
+        RESOURCE_ID_IMAGE_NUM_6,
+        RESOURCE_ID_IMAGE_NUM_7,
+        RESOURCE_ID_IMAGE_NUM_8,
+        RESOURCE_ID_IMAGE_NUM_9,
+        RESOURCE_ID_IMAGE_NUM_X
 };
 
 const int const DATENUM_IMAGE_RESOURCE_IDS[] = {
@@ -75,6 +85,16 @@ const int const DATENUM_IMAGE_RESOURCE_IDS[] = {
         RESOURCE_ID_IMAGE_DATENUM_7,
         RESOURCE_ID_IMAGE_DATENUM_8,
         RESOURCE_ID_IMAGE_DATENUM_9
+};
+
+const int const DAY_NAME_IMAGE_RESOURCE_IDS[] = {
+        RESOURCE_ID_IMAGE_DAY_NAME_SUN,
+        RESOURCE_ID_IMAGE_DAY_NAME_MON,
+        RESOURCE_ID_IMAGE_DAY_NAME_TUE,
+        RESOURCE_ID_IMAGE_DAY_NAME_WED,
+        RESOURCE_ID_IMAGE_DAY_NAME_THU,
+        RESOURCE_ID_IMAGE_DAY_NAME_FRI,
+        RESOURCE_ID_IMAGE_DAY_NAME_SAT
 };
 
 const int const WEATHER_IMAGE_RESOURCE_IDS[] = {
@@ -92,19 +112,6 @@ const int const WEATHER_IMAGE_RESOURCE_IDS[] = {
         RESOURCE_ID_IMAGE_NO_BLUETOOTH
 };
 
-const int const BIG_DIGIT_IMAGE_RESOURCE_IDS[] = {
-        RESOURCE_ID_IMAGE_NUM_0,
-        RESOURCE_ID_IMAGE_NUM_1,
-        RESOURCE_ID_IMAGE_NUM_2,
-        RESOURCE_ID_IMAGE_NUM_3,
-        RESOURCE_ID_IMAGE_NUM_4,
-        RESOURCE_ID_IMAGE_NUM_5,
-        RESOURCE_ID_IMAGE_NUM_6,
-        RESOURCE_ID_IMAGE_NUM_7,
-        RESOURCE_ID_IMAGE_NUM_8,
-        RESOURCE_ID_IMAGE_NUM_9
-};
-
 const int const MOON_IMAGE_RESOURCE_IDS[] = {
         RESOURCE_ID_IMAGE_MOON_0,
         RESOURCE_ID_IMAGE_MOON_1,
@@ -116,38 +123,23 @@ const int const MOON_IMAGE_RESOURCE_IDS[] = {
         RESOURCE_ID_IMAGE_MOON_7
 };
 
-const int const NAMEDAYS_BLOB_RESOURCE_IDS[] = {
-        RESOURCE_ID_NAMEDAYS_JAN_SVK,
-        RESOURCE_ID_NAMEDAYS_FEB_SVK,
-        RESOURCE_ID_NAMEDAYS_MAR_SVK,
-        RESOURCE_ID_NAMEDAYS_APR_SVK,
-        RESOURCE_ID_NAMEDAYS_MAY_SVK,
-        RESOURCE_ID_NAMEDAYS_JUN_SVK,
-        RESOURCE_ID_NAMEDAYS_JUL_SVK,
-        RESOURCE_ID_NAMEDAYS_AUG_SVK,
-        RESOURCE_ID_NAMEDAYS_SEP_SVK,
-        RESOURCE_ID_NAMEDAYS_OCT_SVK,
-        RESOURCE_ID_NAMEDAYS_NOV_SVK,
-        RESOURCE_ID_NAMEDAYS_DEC_SVK
-};
+static void set_container_image(GBitmap **bmp_image, BitmapLayer *bmp_layer, const int resource_id, GPoint origin) {
+    GBitmap *old_image = *bmp_image;
 
-void request_weather();
+    *bmp_image = gbitmap_create_with_resource(resource_id);
+    GRect frame = (GRect) {
+            .origin = origin,
+            .size = (*bmp_image)->bounds.size
+    };
+    bitmap_layer_set_bitmap(bmp_layer, *bmp_image);
+    layer_set_frame(bitmap_layer_get_layer(bmp_layer), frame);
 
-void set_container_image(BmpContainer *bmp_container, const int resource_id, GPoint origin) {
-    layer_remove_from_parent(&bmp_container->layer.layer);
-    bmp_deinit_container(bmp_container);
-
-    bmp_init_container(resource_id, bmp_container);
-
-    GRect frame = layer_get_frame(&bmp_container->layer.layer);
-    frame.origin.x = origin.x;
-    frame.origin.y = origin.y;
-    layer_set_frame(&bmp_container->layer.layer, frame);
-
-    layer_add_child(&window.layer, &bmp_container->layer.layer);
+    if (old_image) {
+        gbitmap_destroy(old_image);
+    }
 }
 
-unsigned short get_display_hour(unsigned short hour) {
+static unsigned short get_display_hour(unsigned short hour) {
     if (clock_is_24h_style()) {
         return hour;
     }
@@ -189,8 +181,8 @@ void updateSunsetSunrise() {
     static char sunrise_text[6];
     static char sunset_text[6];
 
-    PblTm pblTime;
-    get_time(&pblTime);
+    time_t now = time(NULL);
+    struct tm *tick_time = localtime(&now);
 
     char *time_format;
 
@@ -200,26 +192,42 @@ void updateSunsetSunrise() {
         time_format = "%I:%M";
     }
 
-    float sunriseTime = calcSun(pblTime.tm_year, pblTime.tm_mon + 1, pblTime.tm_mday, our_latitude, our_longitude, 0,
+    float sunriseTime = calcSun(tick_time->tm_year, tick_time->tm_mon + 1, tick_time->tm_mday, our_latitude, our_longitude, 0,
     ZENITH_OFFICIAL) + our_timezone;
-    float sunsetTime = calcSun(pblTime.tm_year, pblTime.tm_mon + 1, pblTime.tm_mday, our_latitude, our_longitude, 1,
+    float sunsetTime = calcSun(tick_time->tm_year, tick_time->tm_mon + 1, tick_time->tm_mday, our_latitude, our_longitude, 1,
     ZENITH_OFFICIAL) + our_timezone;
 
-    pblTime.tm_min = (int) (60 * (sunriseTime - ((int) (sunriseTime))));
-    pblTime.tm_hour = (int) sunriseTime;
-    string_format_time(sunrise_text, sizeof(sunrise_text), time_format, &pblTime);
-    text_layer_set_text(&text_sunrise_layer, sunrise_text);
+    tick_time->tm_min = (int) (60 * (sunriseTime - ((int) (sunriseTime))));
+    tick_time->tm_hour = (int) sunriseTime;
+    strftime(sunrise_text, sizeof(sunrise_text), time_format, tick_time);
+    text_layer_set_text(text_sunrise_layer, sunrise_text);
 
-    pblTime.tm_min = (int) (60 * (sunsetTime - ((int) (sunsetTime))));
-    pblTime.tm_hour = (int) sunsetTime;
-    string_format_time(sunset_text, sizeof(sunset_text), time_format, &pblTime);
-    text_layer_set_text(&text_sunset_layer, sunset_text);
+    tick_time->tm_min = (int) (60 * (sunsetTime - ((int) (sunsetTime))));
+    tick_time->tm_hour = (int) sunsetTime;
+    strftime(sunset_text, sizeof(sunset_text), time_format, tick_time);
+    text_layer_set_text(text_sunset_layer, sunset_text);
+}
+/*
+void request_weather() {
+    // Build the HTTP request
+    DictionaryIterator *body;
+    HTTPResult result = http_out_get("http://pwdb.kathar.in/pebble/weather3.php", WEATHER_HTTP_COOKIE, &body);
+    if (result != HTTP_OK) {
+        return;
+    }
+
+    dict_write_int32(body, WEATHER_KEY_LATITUDE, (int) (our_latitude * 10000));
+    dict_write_int32(body, WEATHER_KEY_LONGITUDE, (int) (our_longitude * 10000));
+    dict_write_cstring(body, WEATHER_KEY_UNIT_SYSTEM, UNIT_SYSTEM);
+
+    // Send it.
+    http_out_send();
 }
 
 void failed(int32_t cookie, int http_status, void* context) {
     if (cookie == WEATHER_HTTP_COOKIE) {
-        set_container_image(&weather_image, WEATHER_IMAGE_RESOURCE_IDS[11], GPoint(4, 5));
-        text_layer_set_text(&text_temperature_layer, "");
+        set_container_image(&weather_image, weather_layer, WEATHER_IMAGE_RESOURCE_IDS[11], GPoint(4, 5));
+        text_layer_set_text(text_temperature_layer, "");
     }
 }
 
@@ -231,7 +239,7 @@ void success(int32_t cookie, int http_status, DictionaryIterator* received, void
         if (icon > 10) {
             icon = 10;
         }
-        set_container_image(&weather_image, WEATHER_IMAGE_RESOURCE_IDS[icon], GPoint(4, 5));
+        set_container_image(&weather_image, weather_layer, WEATHER_IMAGE_RESOURCE_IDS[icon], GPoint(4, 5));
         int16_t temp = value & 0x3ff;
         if (value & 0x400) {
             temp = -temp;
@@ -240,10 +248,10 @@ void success(int32_t cookie, int http_status, DictionaryIterator* received, void
         memcpy(temp_text, itoa(temp), 4);
         int degree_pos = strlen(temp_text);
         memcpy(&temp_text[degree_pos], " °", 4);
-        text_layer_set_text(&text_temperature_layer, temp_text);
+        text_layer_set_text(text_temperature_layer, temp_text);
     } else if (cookie == WEATHER_HTTP_COOKIE) {
-        set_container_image(&weather_image, WEATHER_IMAGE_RESOURCE_IDS[10], GPoint(4, 5));
-        text_layer_set_text(&text_temperature_layer, "");
+        set_container_image(&weather_image, weather_layer, WEATHER_IMAGE_RESOURCE_IDS[10], GPoint(4, 5));
+        text_layer_set_text(text_temperature_layer, "");
     }
 }
 
@@ -278,7 +286,7 @@ bool read_state_data(DictionaryIterator* received, struct Data* d) {
 
             static char temp_calls[5];
             memcpy(temp_calls, itoa(tuple->value->uint8), 4);
-            text_layer_set_text(&calls_layer, temp_calls);
+            text_layer_set_text(calls_layer, temp_calls);
 
             has_data = true;
             break;
@@ -288,7 +296,7 @@ bool read_state_data(DictionaryIterator* received, struct Data* d) {
 
             static char temp_sms[5];
             memcpy(temp_sms, itoa(tuple->value->uint8), 4);
-            text_layer_set_text(&sms_layer, temp_sms);
+            text_layer_set_text(sms_layer, temp_sms);
 
             has_data = true;
             break;
@@ -333,92 +341,100 @@ void receivedtime(int32_t utc_offset_seconds, bool is_dst, uint32_t unixtime, co
         updateSunsetSunrise();
     }
 }
+*/
 
-void update_display(PblTm *current_time) {
+static void sync_error_callback(DictionaryResult dict_error, AppMessageResult app_message_error, void *context) {
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "App Message Sync Error: %d", app_message_error);
+}
+
+static void sync_tuple_changed_callback(const uint32_t key, const Tuple* new_tuple, const Tuple* old_tuple, void* context) {
+    switch (key) {
+    case WEATHER_ICON_KEY:
+        set_container_image(&weather_image, weather_layer, WEATHER_IMAGE_RESOURCE_IDS[new_tuple->value->uint8], GPoint(4, 5));
+        break;
+    case WEATHER_TEMPERATURE_KEY:
+        // App Sync keeps new_tuple in sync_buffer, so we may use it directly
+        text_layer_set_text(text_temperature_layer, new_tuple->value->cstring);
+        break;
+    case WEATHER_CITY_KEY:
+        break;
+    }
+}
+
+void update_display(struct tm *current_time) {
     unsigned short display_hour = get_display_hour(current_time->tm_hour);
 
     // Minute
-    set_container_image(&time_digits_images[2], BIG_DIGIT_IMAGE_RESOURCE_IDS[current_time->tm_min / 10], GPoint(80, 94));
-    set_container_image(&time_digits_images[3], BIG_DIGIT_IMAGE_RESOURCE_IDS[current_time->tm_min % 10], GPoint(111, 94));
+    set_container_image(&time_digits_images[2], time_digits_layers[2], BIG_DIGIT_IMAGE_RESOURCE_IDS[current_time->tm_min / 10],
+            GPoint(80, 94));
+    set_container_image(&time_digits_images[3], time_digits_layers[3], BIG_DIGIT_IMAGE_RESOURCE_IDS[current_time->tm_min % 10],
+            GPoint(111, 94));
 
     if (the_last_hour != display_hour) {
-        // Hour
-        set_container_image(&time_digits_images[0], BIG_DIGIT_IMAGE_RESOURCE_IDS[display_hour / 10], GPoint(4, 94));
-        set_container_image(&time_digits_images[1], BIG_DIGIT_IMAGE_RESOURCE_IDS[display_hour % 10], GPoint(37, 94));
-
+        int h = display_hour / 10;
         if (!clock_is_24h_style()) {
-            if (current_time->tm_hour >= 12) {
-                set_container_image(&time_format_image, RESOURCE_ID_IMAGE_PM_MODE, GPoint(118, 140));
-            } else {
-                layer_remove_from_parent(&time_format_image.layer.layer);
-                bmp_deinit_container(&time_format_image);
+            if (the_last_hour == 25 || display_hour == 12) {
+                set_container_image(&time_format_image, time_format_layer,
+                        (current_time->tm_hour < 12) ? RESOURCE_ID_IMAGE_AM_MODE : RESOURCE_ID_IMAGE_PM_MODE, GPoint(118, 140));
             }
-
-            if (!(display_hour / 10)) {
-                layer_remove_from_parent(&time_digits_images[0].layer.layer);
-                bmp_deinit_container(&time_digits_images[0]);
+            if (!h) {
+                h = 10;
             }
         }
 
+        // Hour
+        set_container_image(&time_digits_images[0], time_digits_layers[0], BIG_DIGIT_IMAGE_RESOURCE_IDS[h], GPoint(4, 94));
+        set_container_image(&time_digits_images[1], time_digits_layers[1],
+                BIG_DIGIT_IMAGE_RESOURCE_IDS[display_hour % 10], GPoint(37, 94));
+
         if (the_last_hour == 25 || !current_time->tm_hour) {
             // Day of week
-            set_container_image(&day_name_image, DAY_NAME_IMAGE_RESOURCE_IDS[current_time->tm_wday], GPoint(4, 71));
+            set_container_image(&day_name_image, day_name_layer,
+                    DAY_NAME_IMAGE_RESOURCE_IDS[current_time->tm_wday], GPoint(4, 71));
 
             // Day
-            set_container_image(&date_digits_images[0], DATENUM_IMAGE_RESOURCE_IDS[current_time->tm_mday / 10], GPoint(55, 71));
-            set_container_image(&date_digits_images[1], DATENUM_IMAGE_RESOURCE_IDS[current_time->tm_mday % 10], GPoint(68, 71));
+            set_container_image(&date_digits_images[0], date_digits_layers[0],
+                    DATENUM_IMAGE_RESOURCE_IDS[current_time->tm_mday / 10], GPoint(55, 71));
+            set_container_image(&date_digits_images[1], date_digits_layers[1],
+                    DATENUM_IMAGE_RESOURCE_IDS[current_time->tm_mday % 10], GPoint(68, 71));
 
             // Month
-            set_container_image(&date_digits_images[2], DATENUM_IMAGE_RESOURCE_IDS[(current_time->tm_mon + 1) / 10], GPoint(87, 71));
-            set_container_image(&date_digits_images[3], DATENUM_IMAGE_RESOURCE_IDS[(current_time->tm_mon + 1) % 10], GPoint(100, 71));
+            set_container_image(&date_digits_images[2], date_digits_layers[2],
+                    DATENUM_IMAGE_RESOURCE_IDS[(current_time->tm_mon + 1) / 10], GPoint(87, 71));
+            set_container_image(&date_digits_images[3], date_digits_layers[3],
+                    DATENUM_IMAGE_RESOURCE_IDS[(current_time->tm_mon + 1) % 10], GPoint(100, 71));
 
             // Year
-            set_container_image(&date_digits_images[4], DATENUM_IMAGE_RESOURCE_IDS[((1900 + current_time->tm_year) % 1000) / 10],
-                    GPoint(115, 71));
-            set_container_image(&date_digits_images[5], DATENUM_IMAGE_RESOURCE_IDS[((1900 + current_time->tm_year) % 1000) % 10],
-                    GPoint(128, 71));
+            set_container_image(&date_digits_images[4], date_digits_layers[4],
+                    DATENUM_IMAGE_RESOURCE_IDS[(current_time->tm_year % 100) / 10], GPoint(115, 71));
+            set_container_image(&date_digits_images[5], date_digits_layers[5],
+                    DATENUM_IMAGE_RESOURCE_IDS[(current_time->tm_year % 100) % 10], GPoint(128, 71));
 
             // moon phase
             int moonphase_number;
             moonphase_number = moon_phase(current_time->tm_year + 1900, current_time->tm_mon, current_time->tm_mday);
 
-            set_container_image(&moon_phase_image, MOON_IMAGE_RESOURCE_IDS[moonphase_number], GPoint(61, 143));
-            text_layer_set_text(&MoonLayer, moon_phase_text[moonphase_number]);
+            set_container_image(&moon_phase_image, moon_phase_layer, MOON_IMAGE_RESOURCE_IDS[moonphase_number], GPoint(61, 143));
+            text_layer_set_text(moon_layer, moon_phase_text[moonphase_number]);
 
             // nameday
-            static uint8_t buffer[512];
-            static const char *name;
-            int day_number = current_time->tm_mday - 1;
-            if (the_last_hour == 25 || !day_number) {
-                ResHandle rh = resource_get_handle(NAMEDAYS_BLOB_RESOURCE_IDS[current_time->tm_mon]);
-                /* size_t s = */resource_load(rh, buffer, sizeof(buffer));
-                name = (const char *) buffer;
-                if (the_last_hour == 25) {
-                    for (int i = 0; i < day_number; ++i) {
-                        while (*name++) {
-                        }
-                    }
-                }
-            } else {
-                while (*name++) {
-                }
-            }
-            text_layer_set_text(&ndLayer, name);
+            text_layer_set_text(nd_layer, nameday_text[current_time->tm_mon][current_time->tm_mday - 1]);
 
             // day & calendar week
-            static char cw_text[] = "D888/T88";
-            string_format_time(cw_text, sizeof(cw_text), TRANSLATION_DAY_WEEK, current_time);
-            text_layer_set_text(&cwLayer, cw_text);
+            static char cw_text[9];
+            strftime(cw_text, sizeof(cw_text), "D%j/T%V", current_time);
+            text_layer_set_text(cw_layer, cw_text);
         }
 
         the_last_hour = display_hour;
     }
 }
 
-void handle_minute_tick(AppContextRef ctx, PebbleTickEvent *t) {
-    update_display(t->tick_time);
+static void handle_minute_tick(struct tm *tick_time, TimeUnits units_changed) {
+    update_display(tick_time);
 
-    if (!(t->tick_time->tm_min % 15)) {
+    /*
+    if (!(tick_time->tm_min % 15)) {
         located = false;
         time_received = false;
     }
@@ -432,98 +448,179 @@ void handle_minute_tick(AppContextRef ctx, PebbleTickEvent *t) {
             http_time_request();
         }
     }
+    */
 }
 
-void handle_init(AppContextRef ctx) {
-    window_init(&window, MY_APP);
-    window_stack_push(&window, true /* Animated */);
+static void send_cmd(void) {
+  Tuplet value = TupletInteger(1, 1);
 
-    window_set_background_color(&window, GColorBlack);
+  DictionaryIterator *iter;
+  app_message_outbox_begin(&iter);
 
-    resource_init_current_app(&APP_RESOURCES);
+  if (iter == NULL) {
+    return;
+  }
 
-    bmp_init_container(RESOURCE_ID_IMAGE_BACKGROUND, &background_image);
-    layer_add_child(&window.layer, &background_image.layer.layer);
+  dict_write_tuplet(iter, &value);
+  dict_write_end(iter);
+
+  app_message_outbox_send();
+}
+
+static void window_load(Window *window) {
+  Tuplet initial_values[] = {
+    TupletInteger(WEATHER_ICON_KEY, (uint8_t) 0),
+    TupletCString(WEATHER_TEMPERATURE_KEY, "-18 °"),
+    TupletCString(WEATHER_CITY_KEY, "St Pebblesburg"),
+  };
+
+  app_sync_init(&sync, sync_buffer, sizeof(sync_buffer), initial_values, ARRAY_LENGTH(initial_values),
+      sync_tuple_changed_callback, sync_error_callback, NULL);
+
+  send_cmd();
+}
+
+static void window_unload(Window *window) {
+  app_sync_deinit(&sync);
+}
+
+static void init(void) {
+    window = window_create();
+    window_set_background_color(window, GColorBlack);
+    window_set_fullscreen(window, true);
+    window_set_window_handlers(window, (WindowHandlers) {
+      .load = window_load,
+      .unload = window_unload
+    });
+
+    app_message_open(64, 64);
+    window_stack_push(window, true /* Animated */);
+    Layer *window_layer = window_get_root_layer(window);
+
+    background_image = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_BACKGROUND);
+    background_layer = bitmap_layer_create(layer_get_frame(window_layer));
+    bitmap_layer_set_bitmap(background_layer, background_image);
+    layer_add_child(window_layer, bitmap_layer_get_layer(background_layer));
 
     if (clock_is_24h_style()) {
-        bmp_init_container(RESOURCE_ID_IMAGE_24_HOUR_MODE, &time_format_image);
-
-        time_format_image.layer.layer.frame.origin.x = 118;
-        time_format_image.layer.layer.frame.origin.y = 140;
-
-        layer_add_child(&window.layer, &time_format_image.layer.layer);
+        time_format_image = gbitmap_create_with_resource((clock_is_24h_style()) ? RESOURCE_ID_IMAGE_24_HOUR_MODE : RESOURCE_ID_IMAGE_AM_MODE);
+        GRect frame = (GRect) {
+                .origin = { .x = 118, .y = 140 },
+                .size = time_format_image->bounds.size
+        };
+        time_format_layer = bitmap_layer_create(frame);
+        bitmap_layer_set_bitmap(time_format_layer, time_format_image);
+        layer_add_child(window_layer, bitmap_layer_get_layer(time_format_layer));
+    } else {
+        time_format_layer = bitmap_layer_create(GRectZero);
+        layer_add_child(window_layer, bitmap_layer_get_layer(time_format_layer));
     }
 
-    // Moon Text
-    text_layer_init(&MoonLayer, GRect(88, 136, 30, 16));
-    text_layer_set_text_color(&MoonLayer, GColorWhite);
-    text_layer_set_background_color(&MoonLayer, GColorClear);
-    text_layer_set_font(&MoonLayer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
-    layer_add_child(&background_image.layer.layer, &MoonLayer.layer);
+    /*
+    day_name_layer = bitmap_layer_create(GRectZero);
+    layer_add_child(window_layer, bitmap_layer_get_layer(day_name_layer));
 
-    // Nameday Text
-    text_layer_init(&ndLayer, GRect(5, 50, 85, 16));
-    text_layer_set_text_color(&ndLayer, GColorWhite);
-    text_layer_set_background_color(&ndLayer, GColorClear);
-    text_layer_set_font(&ndLayer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
-    layer_add_child(&background_image.layer.layer, &ndLayer.layer);
+    weather_image = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_NO_WEATHER);
+    frame = (GRect) {
+            .origin = { .x = 4, .y = 5 },
+            .size = weather_image->bounds.size
+    };
+    weather_layer = bitmap_layer_create(frame);
+    bitmap_layer_set_bitmap(weather_layer, weather_image);
+    layer_add_child(window_layer, bitmap_layer_get_layer(weather_layer));
+    */
 
-    // Calendar Week Text
-    text_layer_init(&cwLayer, GRect(90, 50, 49, 16));
-    text_layer_set_text_color(&cwLayer, GColorWhite);
-    text_layer_set_background_color(&cwLayer, GColorClear);
-    text_layer_set_font(&cwLayer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
-    text_layer_set_text_alignment(&cwLayer, GTextAlignmentRight);
-    layer_add_child(&background_image.layer.layer, &cwLayer.layer);
+    day_name_layer = bitmap_layer_create(GRectZero);
+    layer_add_child(window_layer, bitmap_layer_get_layer(day_name_layer));
 
-    // Sunrise Text
-    text_layer_init(&text_sunrise_layer, GRect(7, 152, 29, 16));
-    text_layer_set_text_color(&text_sunrise_layer, GColorWhite);
-    text_layer_set_background_color(&text_sunrise_layer, GColorClear);
-    text_layer_set_font(&text_sunrise_layer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
-    layer_add_child(&window.layer, &text_sunrise_layer.layer);
-    text_layer_set_text(&text_sunrise_layer, "--:--");
+    weather_layer = bitmap_layer_create(GRectZero);
+    layer_add_child(window_layer, bitmap_layer_get_layer(weather_layer));
 
-    // Sunset Text
-    text_layer_init(&text_sunset_layer, GRect(110, 152, 29, 16));
-    text_layer_set_text_color(&text_sunset_layer, GColorWhite);
-    text_layer_set_background_color(&text_sunset_layer, GColorClear);
-    text_layer_set_font(&text_sunset_layer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
-    layer_add_child(&window.layer, &text_sunset_layer.layer);
-    text_layer_set_text(&text_sunset_layer, "--:--");
+    moon_phase_layer = bitmap_layer_create(GRectZero);
+    layer_add_child(window_layer, bitmap_layer_get_layer(moon_phase_layer));
 
-    // Text for Temperature
-    text_layer_init(&text_temperature_layer, GRect(50, 1, 89, 44));
-    text_layer_set_text_color(&text_temperature_layer, GColorWhite);
-    text_layer_set_background_color(&text_temperature_layer, GColorClear);
-    text_layer_set_font(&text_temperature_layer, fonts_get_system_font(FONT_KEY_BITHAM_42_LIGHT));
-    text_layer_set_text_alignment(&text_temperature_layer, GTextAlignmentRight);
-    layer_add_child(&window.layer, &text_temperature_layer.layer);
-    text_layer_set_text(&text_temperature_layer, "- °");
+    // Create time and date layers
+    for (int i = 0; i < TOTAL_TIME_DIGITS; ++i) {
+        time_digits_layers[i] = bitmap_layer_create(GRectZero);
+        layer_add_child(window_layer, bitmap_layer_get_layer(time_digits_layers[i]));
+    }
 
-    // Calls Info layer
-    text_layer_init(&calls_layer, GRect(12, 135, 22, 16));
-    text_layer_set_text_color(&calls_layer, GColorWhite);
-    text_layer_set_background_color(&calls_layer, GColorClear);
-    text_layer_set_font(&calls_layer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
-    layer_add_child(&window.layer, &calls_layer.layer);
-    text_layer_set_text(&calls_layer, "-");
+    for (int i = 0; i < TOTAL_DATE_DIGITS; ++i) {
+        date_digits_layers[i] = bitmap_layer_create(GRectZero);
+        layer_add_child(window_layer, bitmap_layer_get_layer(date_digits_layers[i]));
+    }
 
-    // SMS Info layer
-    text_layer_init(&sms_layer, GRect(41, 135, 22, 16));
-    text_layer_set_text_color(&sms_layer, GColorWhite);
-    text_layer_set_background_color(&sms_layer, GColorClear);
-    text_layer_set_font(&sms_layer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
-    layer_add_child(&window.layer, &sms_layer.layer);
-    text_layer_set_text(&sms_layer, "-");
+    // Nameday text
+    nd_layer = text_layer_create(GRect(5, 50, 85, 16));
+    text_layer_set_text_color(nd_layer, GColorWhite);
+    text_layer_set_background_color(nd_layer, GColorClear);
+    text_layer_set_font(nd_layer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
+    layer_add_child(window_layer, text_layer_get_layer(nd_layer));
 
-    data.link_status = LinkStatusUnknown;
+    // Calendar week text
+    cw_layer = text_layer_create(GRect(90, 50, 49, 16));
+    text_layer_set_text_color(cw_layer, GColorWhite);
+    text_layer_set_background_color(cw_layer, GColorClear);
+    text_layer_set_font(cw_layer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
+    text_layer_set_text_alignment(cw_layer, GTextAlignmentRight);
+    layer_add_child(window_layer, text_layer_get_layer(cw_layer));
 
+    // Temperature text
+    text_temperature_layer = text_layer_create(GRect(50, 1, 89, 44));
+    text_layer_set_text_color(text_temperature_layer, GColorWhite);
+    text_layer_set_background_color(text_temperature_layer, GColorClear);
+    text_layer_set_font(text_temperature_layer, fonts_get_system_font(FONT_KEY_BITHAM_42_LIGHT));
+    text_layer_set_text_alignment(text_temperature_layer, GTextAlignmentRight);
+    layer_add_child(window_layer, text_layer_get_layer(text_temperature_layer));
+    text_layer_set_text(text_temperature_layer, "- °");
+
+    // Calls info text
+    calls_layer = text_layer_create(GRect(12, 135, 22, 16));
+    text_layer_set_text_color(calls_layer, GColorWhite);
+    text_layer_set_background_color(calls_layer, GColorClear);
+    text_layer_set_font(calls_layer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
+    layer_add_child(window_layer, text_layer_get_layer(calls_layer));
+    text_layer_set_text(calls_layer, "-");
+
+    // SMS info text
+    sms_layer = text_layer_create(GRect(41, 135, 22, 16));
+    text_layer_set_text_color(sms_layer, GColorWhite);
+    text_layer_set_background_color(sms_layer, GColorClear);
+    text_layer_set_font(sms_layer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
+    layer_add_child(window_layer, text_layer_get_layer(sms_layer));
+    text_layer_set_text(sms_layer, "-");
+
+    // Moon text
+    moon_layer = text_layer_create(GRect(88, 136, 30, 16));
+    text_layer_set_text_color(moon_layer, GColorWhite);
+    text_layer_set_background_color(moon_layer, GColorClear);
+    text_layer_set_font(moon_layer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
+    layer_add_child(window_layer, text_layer_get_layer(moon_layer));
+
+    // Sunrise text
+    text_sunrise_layer = text_layer_create(GRect(7, 152, 29, 16));
+    text_layer_set_text_color(text_sunrise_layer, GColorWhite);
+    text_layer_set_background_color(text_sunrise_layer, GColorClear);
+    text_layer_set_font(text_sunrise_layer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
+    layer_add_child(window_layer, text_layer_get_layer(text_sunrise_layer));
+    text_layer_set_text(text_sunrise_layer, "--:--");
+
+    // Sunset text
+    text_sunset_layer = text_layer_create(GRect(110, 152, 29, 16));
+    text_layer_set_text_color(text_sunset_layer, GColorWhite);
+    text_layer_set_background_color(text_sunset_layer, GColorClear);
+    text_layer_set_font(text_sunset_layer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
+    layer_add_child(window_layer, text_layer_get_layer(text_sunset_layer));
+    text_layer_set_text(text_sunset_layer, "--:--");
+
+    // data.link_status = LinkStatusUnknown;
+
+    /*
     // request data refresh on window appear (for example after notification)
     WindowHandlers handlers = { .appear = &request_phone_state };
     window_set_window_handlers(&window, handlers);
 
-    http_register_callbacks((HTTPCallbacks ) {
+    http_register_callbacks((HTTPCallbacks) {
             .failure = failed,
             .success = success,
             .reconnect = reconnect,
@@ -534,61 +631,110 @@ void handle_init(AppContextRef ctx) {
     );
 
     register_callbacks();
+    */
 
-    // avoids a blank screen on watch start
-    PblTm tick_time;
+    // Avoids a blank screen on watch start.
+    time_t now = time(NULL);
+    struct tm *tick_time = localtime(&now);
 
-    get_time(&tick_time);
-    update_display(&tick_time);
-}
+    update_display(tick_time);
 
-void handle_deinit(AppContextRef ctx) {
-    bmp_deinit_container(&background_image);
-    bmp_deinit_container(&day_name_image);
-    bmp_deinit_container(&time_format_image);
-    bmp_deinit_container(&moon_phase_image);
-    bmp_deinit_container(&weather_image);
+    tick_timer_service_subscribe(MINUTE_UNIT, handle_minute_tick);
 
-    for (int i = 0; i < TOTAL_DATE_DIGITS; i++) {
-        bmp_deinit_container(&date_digits_images[i]);
-    }
+    /*
+    app_message_open(64, 64);
 
-    for (int i = 0; i < TOTAL_TIME_DIGITS; i++) {
-        bmp_deinit_container(&time_digits_images[i]);
-    }
-}
-
-void pbl_main(void *params) {
-    PebbleAppHandlers handlers = {
-        .init_handler = &handle_init,
-        .deinit_handler = &handle_deinit,
-        .tick_info = {
-            .tick_handler = &handle_minute_tick,
-            .tick_units = MINUTE_UNIT
-        },
-        .messaging_info = {
-            .buffer_sizes = {
-                .inbound = 124,
-                .outbound = 256,
-            }
-        }
+    Tuplet initial_values[] = {
+        TupletInteger(WEATHER_ICON_KEY, (uint8_t) 10),
+        TupletCString(WEATHER_TEMPERATURE_KEY, "- °"),
+        TupletCString(WEATHER_CITY_KEY, "-")
     };
 
-    app_event_loop(params, &handlers);
+    app_sync_init(&sync, sync_buffer, sizeof(sync_buffer), initial_values, ARRAY_LENGTH(initial_values),
+            sync_tuple_changed_callback, sync_error_callback, NULL);
+
+    DictionaryIterator *iter;
+    app_message_outbox_begin(&iter);
+    if (iter != NULL) {
+        dict_write_end(iter);
+        app_message_outbox_send();
+    }
+    */
 }
 
-void request_weather() {
-    // Build the HTTP request
-    DictionaryIterator *body;
-    HTTPResult result = http_out_get("http://pwdb.kathar.in/pebble/weather3.php", WEATHER_HTTP_COOKIE, &body);
-    if (result != HTTP_OK) {
-        return;
+static void deinit(void) {
+    //app_sync_deinit(&sync);
+    tick_timer_service_unsubscribe();
+
+    layer_remove_from_parent(text_layer_get_layer(text_sunset_layer));
+    text_layer_destroy(text_sunset_layer);
+
+    layer_remove_from_parent(text_layer_get_layer(text_sunrise_layer));
+    text_layer_destroy(text_sunrise_layer);
+
+    layer_remove_from_parent(text_layer_get_layer(moon_layer));
+    text_layer_destroy(moon_layer);
+
+    layer_remove_from_parent(text_layer_get_layer(sms_layer));
+    text_layer_destroy(sms_layer);
+
+    layer_remove_from_parent(text_layer_get_layer(calls_layer));
+    text_layer_destroy(calls_layer);
+
+    layer_remove_from_parent(text_layer_get_layer(text_temperature_layer));
+    text_layer_destroy(text_temperature_layer);
+
+    layer_remove_from_parent(text_layer_get_layer(cw_layer));
+    text_layer_destroy(cw_layer);
+
+    layer_remove_from_parent(text_layer_get_layer(nd_layer));
+    text_layer_destroy(nd_layer);
+
+    for (int i = 0; i < TOTAL_DATE_DIGITS; ++i) {
+        layer_remove_from_parent(bitmap_layer_get_layer(date_digits_layers[i]));
+        bitmap_layer_destroy(date_digits_layers[i]);
+        gbitmap_destroy(date_digits_images[i]);
     }
 
-    dict_write_int32(body, WEATHER_KEY_LATITUDE, (int) (our_latitude * 10000));
-    dict_write_int32(body, WEATHER_KEY_LONGITUDE, (int) (our_longitude * 10000));
-    dict_write_cstring(body, WEATHER_KEY_UNIT_SYSTEM, UNIT_SYSTEM);
+    for (int i = 0; i < TOTAL_TIME_DIGITS; ++i) {
+        layer_remove_from_parent(bitmap_layer_get_layer(time_digits_layers[i]));
+        bitmap_layer_destroy(time_digits_layers[i]);
+        gbitmap_destroy(time_digits_images[i]);
+    }
 
-    // Send it.
-    http_out_send();
+    layer_remove_from_parent(bitmap_layer_get_layer(moon_phase_layer));
+    bitmap_layer_destroy(moon_phase_layer);
+    if (moon_phase_image) {
+        gbitmap_destroy(moon_phase_image);
+    }
+
+    layer_remove_from_parent(bitmap_layer_get_layer(weather_layer));
+    bitmap_layer_destroy(weather_layer);
+    if (weather_image) {
+        gbitmap_destroy(weather_image);
+    }
+
+    layer_remove_from_parent(bitmap_layer_get_layer(day_name_layer));
+    bitmap_layer_destroy(day_name_layer);
+    if (day_name_image) {
+        gbitmap_destroy(day_name_image);
+    }
+
+    layer_remove_from_parent(bitmap_layer_get_layer(time_format_layer));
+    bitmap_layer_destroy(time_format_layer);
+    if (time_format_image) {
+        gbitmap_destroy(time_format_image);
+    }
+
+    layer_remove_from_parent(bitmap_layer_get_layer(background_layer));
+    bitmap_layer_destroy(background_layer);
+    gbitmap_destroy(background_image);
+
+    window_destroy(window);
+}
+
+int main(void) {
+    init();
+    app_event_loop();
+    deinit();
 }
