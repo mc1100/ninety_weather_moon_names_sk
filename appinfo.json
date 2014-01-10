@@ -10,9 +10,10 @@
     "watchface": true
   },
   "appKeys": {
-    "city": 2,
+    "icon": 0,
     "temperature": 1,
-    "icon": 0
+    "sunrise": 2,
+    "sunset": 3
   },
   "resources": {
     "media": [
@@ -194,53 +195,83 @@
       },
       {
         "type": "png",
-        "name": "IMAGE_CLEAR_DAY",
-        "file": "images/clear-day.png"
+        "name": "IMAGE_WEATHER_01D",
+        "file": "images/01d.png"
       },
       {
         "type": "png",
-        "name": "IMAGE_CLEAR_NIGHT",
-        "file": "images/clear-night.png"
+        "name": "IMAGE_WEATHER_01N",
+        "file": "images/01n.png"
       },
       {
         "type": "png",
-        "name": "IMAGE_CLOUDY",
-        "file": "images/cloudy.png"
+        "name": "IMAGE_WEATHER_02D",
+        "file": "images/02d.png"
       },
       {
         "type": "png",
-        "name": "IMAGE_FOG",
-        "file": "images/fog.png"
+        "name": "IMAGE_WEATHER_02N",
+        "file": "images/02n.png"
       },
       {
         "type": "png",
-        "name": "IMAGE_PARTLY_CLOUDY_DAY",
-        "file": "images/partly-cloudy-day.png"
+        "name": "IMAGE_WEATHER_03",
+        "file": "images/03.png"
       },
       {
         "type": "png",
-        "name": "IMAGE_PARTLY_CLOUDY_NIGHT",
-        "file": "images/partly-cloudy-night.png"
+        "name": "IMAGE_WEATHER_04",
+        "file": "images/04.png"
       },
       {
         "type": "png",
-        "name": "IMAGE_RAIN",
-        "file": "images/rain.png"
+        "name": "IMAGE_WEATHER_09D",
+        "file": "images/09d.png"
       },
       {
         "type": "png",
-        "name": "IMAGE_SLEET",
-        "file": "images/sleet.png"
+        "name": "IMAGE_WEATHER_09N",
+        "file": "images/09n.png"
       },
       {
         "type": "png",
-        "name": "IMAGE_SNOW",
-        "file": "images/snow.png"
+        "name": "IMAGE_WEATHER_10D",
+        "file": "images/10d.png"
       },
       {
         "type": "png",
-        "name": "IMAGE_WIND",
-        "file": "images/wind.png"
+        "name": "IMAGE_WEATHER_10N",
+        "file": "images/10n.png"
+      },
+      {
+        "type": "png",
+        "name": "IMAGE_WEATHER_11D",
+        "file": "images/11d.png"
+      },
+      {
+        "type": "png",
+        "name": "IMAGE_WEATHER_11N",
+        "file": "images/11n.png"
+      },
+      {
+        "type": "png",
+        "name": "IMAGE_WEATHER_13D",
+        "file": "images/13d.png"
+      },
+      {
+        "type": "png",
+        "name": "IMAGE_WEATHER_13N",
+        "file": "images/13n.png"
+      },
+      {
+        "type": "png",
+        "name": "IMAGE_WEATHER_50D",
+        "file": "images/50d.png"
+      },
+      {
+        "type": "png",
+        "name": "IMAGE_WEATHER_50N",
+        "file": "images/50n.png"
       },
       {
         "type": "png",
