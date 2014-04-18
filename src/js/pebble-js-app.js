@@ -25,12 +25,13 @@ function iconFromWeatherIcon(weatherIcon) {
 }
 
 function strTime(timestamp) {
-    return new Date(timestamp * 1000).toTimeString().substr(0, 5);
+    return (timestamp) ? new Date(timestamp * 1000).toTimeString().substr(0, 5) : "--:--";
 }
 
 function fetchWeather(latitude, longitude) {
     var req = new XMLHttpRequest();
     req.open("GET", "http://api.openweathermap.org/data/2.5/weather?lat=" + latitude + "&lon=" + longitude + "&units=metric", true);
+    //req.open("GET", "http://api.openweathermap.org/data/2.5/weather?lat=" + latitude + "&lon=" + longitude + "&units=metric&APPID=7ea2c73b4157ffa54303ee1565edc8be", true);
     req.onload = function(e) {
         if (req.readyState == 4) {
             if (req.status == 200) {
@@ -46,6 +47,7 @@ function fetchWeather(latitude, longitude) {
                 }
             } else {
                 // console.warn("XMLHttpRequest error");
+                onError()
             }
         }
     };
@@ -58,8 +60,16 @@ function locationSuccess(pos) {
 }
 
 function locationError(err) {
-    // console.warn("location error (" + err.code + "): " + err.message);
-    Pebble.sendAppMessage({});
+    onError();
+}
+
+function onError() {
+    Pebble.sendAppMessage({
+        "icon" : 0,
+        "temperature" : "- \u00B0",
+        "sunrise" : strTime(null),
+        "sunset" : strTime(null)
+    });
 }
 
 var locationOptions = {
@@ -70,9 +80,4 @@ var locationOptions = {
 Pebble.addEventListener("ready", function(e) {
     // console.log("connect!" + e.ready);
     locationWatcher = window.navigator.geolocation.watchPosition(locationSuccess, locationError, locationOptions);
-});
-
-Pebble.addEventListener("appmessage", function(e) {
-    window.navigator.geolocation.getCurrentPosition(locationSuccess, locationError, locationOptions);
-    // console.log("message!");
 });

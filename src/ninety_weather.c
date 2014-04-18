@@ -1,6 +1,9 @@
+#include <stdlib.h>
+#include <string.h>
+#include <math.h>
+
 #include "pebble.h"
-#include "stdlib.h"
-#include "string.h"
+
 #include "config.h"
 
 static Window *window = NULL;
@@ -147,31 +150,22 @@ static unsigned short get_display_hour(unsigned short hour) {
     return display_hour ? display_hour : 12;
 }
 
+double frac(double a) {
+    return a - floor(a);
+}
+
+double fmod(double a, double b) {
+    double c = frac(fabs(a / b)) * fabs(b);
+    return (a < 0) ? -c : c;
+}
+
 /*
  * Calculates the moon phase (0-7), accurate to 1 segment.
  * 0 = > new moon.
  * 4 => full moon.
  */
-int moon_phase(int y, int m, int d) {
-    int c, e;
-    double jd;
-    int b;
-
-    if (m < 3) {
-        y--;
-        m += 12;
-    }
-    ++m;
-    c = 365.25d * y;
-    e = 30.6d * m;
-    jd = c + e + d - 694039.09d; /* jd is total days elapsed */
-    jd /= 29.53d; /* divide by the moon cycle (29.53 days) */
-    b = jd; /* int(jd) -> b, take integer part of jd */
-    jd -= b; /* subtract integer part to leave fractional part of original jd */
-    b = jd * 8 + 0.5d; /* scale fraction from 0-8 and round by adding 0.5 */
-    b = b & 7; /* 0 and 8 are the same so turn 8 into 0 */
-
-    return b;
+int get_moon_phase() {
+    return (int) (round(fmod((time(NULL) - 592500) / 86400.d, 29.53058868) * 8 / 29.53058868d)) & 7;
 }
 
 void update_display(struct tm *current_time) {
@@ -224,11 +218,9 @@ void update_display(struct tm *current_time) {
                     DATENUM_IMAGE_RESOURCE_IDS[(current_time->tm_year % 100) % 10], GPoint(128, 71));
 
             // moon phase
-            int moonphase_number;
-            moonphase_number = moon_phase(current_time->tm_year + 1900, current_time->tm_mon, current_time->tm_mday);
-
-            set_container_image(&moon_phase_image, moon_phase_layer, MOON_IMAGE_RESOURCE_IDS[moonphase_number], GPoint(61, 143));
-            text_layer_set_text(moon_layer, moon_phase_text[moonphase_number]);
+            int moonphase = get_moon_phase();
+            set_container_image(&moon_phase_image, moon_phase_layer, MOON_IMAGE_RESOURCE_IDS[moonphase], GPoint(61, 143));
+            text_layer_set_text(moon_layer, moon_phase_text[moonphase]);
 
             // nameday
             text_layer_set_text(nd_layer, nameday_text[current_time->tm_mon][current_time->tm_mday - 1]);
@@ -265,11 +257,11 @@ static void handle_minute_tick(struct tm *tick_time, TimeUnits units_changed) {
 }
 
 static void sync_error_callback(DictionaryResult dict_error, AppMessageResult app_message_error, void *context) {
-  APP_LOG(APP_LOG_LEVEL_DEBUG, "App Message Sync Error: %d", app_message_error);
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "App Message Sync Error: %d", app_message_error);
 }
 
 static void sync_tuple_changed_callback(const uint32_t key, const Tuple* new_tuple, const Tuple* old_tuple, void* context) {
-  switch (key) {
+    switch (key) {
     case WEATHER_ICON_KEY:
         set_container_image(&weather_image, weather_layer, WEATHER_IMAGE_RESOURCE_IDS[new_tuple->value->uint8], GPoint(4, 5));
         break;
@@ -282,23 +274,7 @@ static void sync_tuple_changed_callback(const uint32_t key, const Tuple* new_tup
     case SUNSET_KEY:
         text_layer_set_text(text_sunset_layer, new_tuple->value->cstring);
         break;
-  }
-}
-
-static void send_cmd(void) {
-  Tuplet value = TupletInteger(0, 0);
-
-  DictionaryIterator *iter;
-  app_message_outbox_begin(&iter);
-
-  if (iter == NULL) {
-    return;
-  }
-
-  dict_write_tuplet(iter, &value);
-  dict_write_end(iter);
-
-  app_message_outbox_send();
+    }
 }
 
 static void window_load(Window *window) {
@@ -426,16 +402,14 @@ static void window_load(Window *window) {
     tick_timer_service_subscribe(MINUTE_UNIT, handle_minute_tick);
 
     Tuplet initial_values[] = {
-      TupletInteger(WEATHER_ICON_KEY, (uint8_t) 0),
-      TupletCString(WEATHER_TEMPERATURE_KEY, "- °"),
-      TupletCString(SUNRISE_KEY, "--:--"),
-      TupletCString(SUNSET_KEY, "--:--")
+            TupletInteger(WEATHER_ICON_KEY, (uint8_t) 0),
+            TupletCString(WEATHER_TEMPERATURE_KEY, "- °"),
+            TupletCString(SUNRISE_KEY, "--:--"),
+            TupletCString(SUNSET_KEY, "--:--")
     };
 
     app_sync_init(&sync, sync_buffer, sizeof(sync_buffer), initial_values, ARRAY_LENGTH(initial_values),
-        sync_tuple_changed_callback, sync_error_callback, NULL);
-
-    send_cmd();
+            sync_tuple_changed_callback, sync_error_callback, NULL);
 }
 
 static void window_unload(Window *window) {
@@ -509,25 +483,25 @@ static void window_unload(Window *window) {
 }
 
 static void init(void) {
-  window = window_create();
-  window_set_background_color(window, GColorBlack);
-  window_set_fullscreen(window, true);
-  window_set_window_handlers(window, (WindowHandlers) {
-    .load = window_load,
-    .unload = window_unload
-  });
+    window = window_create();
+    window_set_background_color(window, GColorBlack);
+    window_set_fullscreen(window, true);
+    window_set_window_handlers(window, (WindowHandlers) {
+        .load = window_load,
+        .unload = window_unload
+    });
 
-  app_message_open(64, 64);
+    app_message_open(64, 64);
 
-  window_stack_push(window, true);
+    window_stack_push(window, true);
 }
 
 static void deinit(void) {
-  window_destroy(window);
+    window_destroy(window);
 }
 
 int main(void) {
-  init();
-  app_event_loop();
-  deinit();
+    init();
+    app_event_loop();
+    deinit();
 }
