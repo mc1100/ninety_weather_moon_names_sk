@@ -2,10 +2,10 @@
   "uuid": "6ebe49d7-bc89-498e-b147-2908f17c3fad",
   "shortName": "91 Weather Moon Names SK",
   "longName": "91 Weather Moon Names SK",
-  "capabilities": [ "location" ],
+  "capabilities": [ "location", "configurable" ],
   "companyName": "mc1100",
-  "versionCode": 3,
-  "versionLabel": "2.0.1",
+  "versionCode": 4,
+  "versionLabel": "2.0.3",
   "watchapp": {
     "watchface": true
   },

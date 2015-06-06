@@ -30,12 +30,10 @@ function strTime(timestamp) {
 
 function fetchWeather(latitude, longitude) {
     var req = new XMLHttpRequest();
-    req.open("GET", "http://api.openweathermap.org/data/2.5/weather?lat=" + latitude + "&lon=" + longitude + "&units=metric", true);
-    //req.open("GET", "http://api.openweathermap.org/data/2.5/weather?lat=" + latitude + "&lon=" + longitude + "&units=metric&APPID=7ea2c73b4157ffa54303ee1565edc8be", true);
+    req.open("GET", "http://api.openweathermap.org/data/2.5/weather?lat=" + latitude + "&lon=" + longitude + "&units=metric&APPID=7ea2c73b4157ffa54303ee1565edc8be", true);
     req.onload = function(e) {
         if (req.readyState == 4) {
             if (req.status == 200) {
-                // console.log(req.responseText);
                 var response = JSON.parse(req.responseText);
                 if (response) {
                     Pebble.sendAppMessage({
@@ -46,8 +44,7 @@ function fetchWeather(latitude, longitude) {
                     });
                 }
             } else {
-                // console.warn("XMLHttpRequest error");
-                onError()
+                onError(e.error.message);
             }
         }
     };
@@ -59,11 +56,12 @@ function locationSuccess(pos) {
     fetchWeather(coordinates.latitude, coordinates.longitude);
 }
 
-function locationError(err) {
-    onError();
+function locationError(message) {
+    console.log("failed to obtain location. Error: " + message);
+    onError(message);
 }
 
-function onError() {
+function onError(message) {
     Pebble.sendAppMessage({
         "icon" : 0,
         "temperature" : "- \u00B0",
@@ -78,6 +76,40 @@ var locationOptions = {
 };
 
 Pebble.addEventListener("ready", function(e) {
-    // console.log("connect!" + e.ready);
-    locationWatcher = window.navigator.geolocation.watchPosition(locationSuccess, locationError, locationOptions);
+    console.log("ready");
+    window.navigator.geolocation.watchPosition(locationSuccess, locationError, locationOptions);
+});
+
+Pebble.addEventListener("showConfiguration", function(e) {
+    var options = JSON.parse(window.localStorage.getItem("options"));
+    var uri = "https://rawgit.com/mc1100/ninety_weather_moon_names_sk/sdk_2.0/html/configuration.html";
+    if (options === null) {
+        console.log("options have not been set");
+    } else {
+        var so = JSON.stringify(options);
+        console.log("read options: " + so);
+        var uri += "?calendar=" + encodeURIComponent(options["calendar"]);
+    }
+
+    Pebble.openURL(uri);
+});
+
+Pebble.addEventListener("webviewclosed", function(e) {
+    console.log("configuration closed");
+    if (e.response) {
+        var options = JSON.parse(decodeURIComponent(e.response));
+        var stroptions = JSON.stringify(options);
+        console.log("storing options: " + stroptions);
+        window.localStorage.setItem("options", stroptions);
+        Pebble.sendAppMessage(options,
+            function(e) {
+                console.log("successfully sent options to pebble");
+            },
+            function(e) {
+                console.log("failed to send options to pebble. Error: " + e.error.message);
+            }
+        );
+    } else {
+        console.log("no options received");
+    }
 });
